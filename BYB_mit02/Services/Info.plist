@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>GoogleSafeBrowsingKey</key>
+	<string>AIzaSyCWjFQxcMapLVXcpye939ddPWk6IdL-mYY</string>
+	<key>VirusTotalKey</key>
+	<string>c785da746f0a67e2e1cb575fc482aad3f5cecb5a1d3be0fa97253cc23ed3acf8</string>
+	<key>CFBundleIdentifier</key>
+	<string>Vituruch.BYB-mit02</string>
+	<key>CFBundleName</key>
+	<string>BYB_mit02</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleVersion</key>
+	<string></string>
+	<key>Bundle versions string, short</key>
+	<string></string>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIImageName</key>
+		<string></string>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera Usage Description</string>
+</dict>
+</plist>
