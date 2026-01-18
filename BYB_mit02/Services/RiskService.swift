@@ -5,40 +5,38 @@
 //  Created by Vituruch Sinthusate on 7/1/2569 BE.
 //
 
+
 import Foundation
 
 final class RiskService {
+    static let noDataReason = "ไม่มีข้อมูลในระบบ"
+
     private let repository: ScamRepository
 
     init(repository: ScamRepository) {
         self.repository = repository
     }
 
-    func scan(type: ScanType, input: String) async -> ScanResult {
+    /// คืนค่าเฉพาะผลจากฐานข้อมูล (DB)
+    /// - ถ้าพบใน DB -> reasons เป็นหลักฐาน DB (ไม่ใส่ noDataReason)
+    /// - ถ้าไม่พบใน DB -> reasons = [noDataReason]
+    func scanDBOnly(type: ScanType, input: String) async -> ScanResult {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if type == .faceScan || type == .report {
             return ScanResult(type: type, input: trimmed, level: .low, reasons: [])
         }
 
-        // QR ใช้ฐานข้อมูลแบบ URL
         let lookupType: ScanType = (type == .qr) ? .url : type
         let matches = await repository.findMatches(type: lookupType, input: trimmed)
 
         if !matches.isEmpty {
-            return ScanResult(
-                type: type,
-                input: trimmed,
-                level: .high,
-                reasons: matches.map { "ฐานข้อมูลมิจฉาชีพ: \($0.label)" }
-            )
+            // พบใน DB (ให้เป็น high)
+            let reasons = matches.map { "ฐานข้อมูลมิจฉาชีพ: \($0.label)" }
+            return ScanResult(type: type, input: trimmed, level: .high, reasons: reasons)
         }
 
-        return ScanResult(
-            type: type,
-            input: trimmed,
-            level: .low,
-            reasons: ["ไม่พบข้อมูลมิจฉาชีพ"]
-        )
+        // ไม่พบใน DB -> flag no data
+        return ScanResult(type: type, input: trimmed, level: .low, reasons: [Self.noDataReason])
     }
 }

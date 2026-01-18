@@ -27,9 +27,7 @@ final class ScanHistory: ObservableObject {
     }
 
     func delete(_ item: ScanResult) {
-        withAnimation(.snappy) {
-            items.removeAll { $0.id == item.id }
-        }
+        withAnimation(.snappy) { items.removeAll { $0.id == item.id } }
         save()
     }
 
@@ -87,8 +85,6 @@ struct HistoryView: View {
     }
 }
 
-
-
 private struct HistoryCard: View {
     let result: ScanResult
     let onDelete: () -> Void
@@ -96,12 +92,13 @@ private struct HistoryCard: View {
 
     var body: some View {
         let isUnknown = result.reasons.contains("ไม่สามารถตรวจสอบได้เนื่องจากไม่พบที่อยู่ของเว็บไซต์")
+        let isNoData = result.reasons.contains(RiskService.noDataReason)
 
         Button(action: onTap) {
             HStack(spacing: 12) {
                 Circle()
                     .frame(width: 14, height: 14)
-                    .foregroundStyle(isUnknown ? .gray : dotColor)
+                    .foregroundStyle((isUnknown || isNoData) ? .gray : dotColor)
                     .opacity(0.9)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -117,15 +114,11 @@ private struct HistoryCard: View {
                 Spacer()
 
                 if isUnknown {
-                    Text("UNKNOWN")
-                        .font(.caption2).bold()
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.gray.opacity(0.15))
-                        .foregroundStyle(.gray)
-                        .cornerRadius(10)
+                    pillGray("UNKNOWN")
+                } else if isNoData {
+                    pillGray("NO DATA")
                 } else {
-                    StatusPill(level: result.level)
+                    StatusPill(level: result.level) // ใช้ตัวเดิมที่มีอยู่แล้วในโปรเจกต์
                 }
 
                 Button(action: onDelete) {
@@ -141,12 +134,25 @@ private struct HistoryCard: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(isUnknown ? Color.gray.opacity(0.08) : bgColor)
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(isUnknown ? Color.gray.opacity(0.2) : borderColor, lineWidth: 1))
+                    .fill((isUnknown || isNoData) ? Color.gray.opacity(0.08) : bgColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke((isUnknown || isNoData) ? Color.gray.opacity(0.2) : borderColor, lineWidth: 1)
+                    )
             )
             .padding(.horizontal, 16)
         }
         .buttonStyle(.plain)
+    }
+
+    private func pillGray(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2).bold()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.gray.opacity(0.15))
+            .foregroundStyle(.gray)
+            .cornerRadius(10)
     }
 
     private var dotColor: Color {
@@ -156,6 +162,7 @@ private struct HistoryCard: View {
         case .high: return .red
         }
     }
+
     private var bgColor: Color {
         switch result.level {
         case .low: return Color.green.opacity(0.12)
@@ -163,6 +170,7 @@ private struct HistoryCard: View {
         case .high: return Color.red.opacity(0.14)
         }
     }
+
     private var borderColor: Color {
         switch result.level {
         case .low: return Color.green.opacity(0.35)

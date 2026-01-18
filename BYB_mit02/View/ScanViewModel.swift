@@ -18,28 +18,28 @@ final class ScanViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
-    // ✅ ใช้เป็น instance เดียว + forward change ให้ UI refresh ทันที
     let history = ScanHistory()
 
     private var cancellables = Set<AnyCancellable>()
 
-    // Services
-    private let riskService = RiskService(repository: FirebaseScamRepository())
+    private let repository = FirebaseScamRepository()
+    private lazy var riskService = RiskService(repository: repository)
+
     private let urlAnalyzer = UrlRiskAnalyzer()
     private let smsAnalyzer = SmsRiskAnalyzer()
     private let phoneValidator = PhoneValidator()
 
-    // ✅ Sprint C: Bank via Firestore
+    // Bank Firestore
     private let bankFS = BankFirestoreService()
 
     init() {
-        // ✅ Forward nested ObservableObject -> View refresh ทันทีเมื่อ history เปลี่ยน
+        // ✅ ลบแล้วหายทันที (forward nested objectWillChange)
         history.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
 
-    // MARK: - Public helpers (QR normalize)
+    // MARK: - Helpers (URL normalize)
 
     func normalizeUrlInput(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -61,18 +61,15 @@ final class ScanViewModel: ObservableObject {
         return false
     }
 
-    // MARK: - Normalization
-
     func normalizedInputForScan() -> String {
         switch selectedType {
         case .phone:
-            return phoneDigits
+            return phoneDigits.trimmingCharacters(in: .whitespacesAndNewlines)
 
         case .bank:
             if bankMode == .byAccount {
-                // ⚠️ สำคัญ: ห้ามตัด 0 นำหน้า (Firestore docID มี leading zeros)
-                // ดังนั้น "กรองเฉพาะตัวเลข" แต่คงลำดับเดิมไว้
                 let raw = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                // ⚠️ รักษา 0 นำหน้า
                 return raw.filter { $0.isNumber }
             } else {
                 return fullNameInput
@@ -97,7 +94,7 @@ final class ScanViewModel: ObservableObject {
         errorMessage = nil
     }
 
-    // MARK: - Bank (Sprint C)
+    // MARK: - Bank (Firestore + heuristic + noData gray)
 
     func runBankScan() async -> ScanResult? {
         let input = normalizedInputForScan()
@@ -108,13 +105,19 @@ final class ScanViewModel: ObservableObject {
 
         do {
             if bankMode == .byAccount {
-                // 1) Firestore blacklist by docID
                 let entry = try await bankFS.fetchBlacklistByAccount(input)
 
-                // 2) user reports (optional)
+                // เสริม: รายงานผู้ใช้
                 let reports = await bankFS.fetchReportsByAccount(inputText.trimmingCharacters(in: .whitespacesAndNewlines))
 
                 isLoading = false
+
+                // heuristic
+                var heuristic: [String] = []
+                heuristic.append("Heuristic: ตรวจรูปแบบเลขบัญชี")
+                heuristic.append("• ความยาว: \(input.count) หลัก")
+                if input.count < 8 { heuristic.append("• ความยาวสั้นผิดปกติ") }
+                if Set(input).count <= 2 { heuristic.append("• เลขซ้ำ/แพทเทิร์นแปลก (น่าสงสัย)") }
 
                 if let e = entry {
                     var reasons: [String] = []
@@ -123,6 +126,9 @@ final class ScanViewModel: ObservableObject {
                     reasons.append(contentsOf: e.reasons ?? [])
                     reasons.append(contentsOf: reports)
 
+                    // แสดง heuristic ต่อท้ายด้วย
+                    reasons.append(contentsOf: heuristic)
+
                     var result = ScanResult(type: .bank, input: input, level: e.riskLevel, reasons: reasons.uniquedPreservingOrder())
                     result.bankName = e.bank_name
                     result.ownerName = e.name
@@ -130,30 +136,34 @@ final class ScanViewModel: ObservableObject {
                     return result
                 }
 
-                // ถ้าไม่พบ blacklist แต่มีรายงาน
-                if !reports.isEmpty {
-                    let r = ScanResult(type: .bank, input: input, level: .medium, reasons: reports.uniquedPreservingOrder())
-                    history.add(r)
-                    return r
-                }
+                // ✅ ไม่พบในฐานข้อมูล -> เทา + แสดง heuristic
+                var noDataReasons = [RiskService.noDataReason]
+                noDataReasons.append(contentsOf: reports)
+                noDataReasons.append(contentsOf: heuristic)
 
-                let ok = ScanResult(type: .bank, input: input, level: .low, reasons: ["ไม่พบใน bank_blacklist และไม่พบรายงานผู้ใช้"])
-                history.add(ok)
-                return ok
+                let result = ScanResult(type: .bank, input: input, level: .low, reasons: noDataReasons.uniquedPreservingOrder())
+                history.add(result)
+                return result
 
             } else {
-                // byName (exact match)
+                // byName
                 let matches = try await bankFS.fetchBlacklistByName(input)
 
                 isLoading = false
 
+                var heuristic: [String] = []
+                heuristic.append("Heuristic: ตรวจรูปแบบชื่อ")
+                heuristic.append("• จำนวนคำ: \(input.split(separator: " ").count)")
+                if input.count < 6 { heuristic.append("• ชื่อสั้นผิดปกติ") }
+
                 if matches.isEmpty {
-                    let ok = ScanResult(type: .bank, input: input, level: .low, reasons: ["ไม่พบชื่อใน bank_blacklist"])
-                    history.add(ok)
-                    return ok
+                    // ✅ ไม่พบในฐานข้อมูล -> เทา + heuristic
+                    let result = ScanResult(type: .bank, input: input, level: .low,
+                                            reasons: ([RiskService.noDataReason] + heuristic).uniquedPreservingOrder())
+                    history.add(result)
+                    return result
                 }
 
-                // เลือกผลที่เสี่ยงที่สุด
                 let worst = matches.max(by: { $0.riskLevel < $1.riskLevel }) ?? matches[0]
 
                 var reasons: [String] = []
@@ -161,6 +171,7 @@ final class ScanViewModel: ObservableObject {
                 reasons.append(worst.bank_name.map { "ธนาคาร: \($0)" } ?? "—")
                 reasons.append(worst.name.map { "ชื่อผู้รับ: \($0)" } ?? "—")
                 reasons.append(contentsOf: worst.reasons ?? [])
+                reasons.append(contentsOf: heuristic)
 
                 var result = ScanResult(type: .bank, input: input, level: worst.riskLevel, reasons: reasons.uniquedPreservingOrder())
                 result.bankName = worst.bank_name
@@ -175,7 +186,7 @@ final class ScanViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Phone
+    // MARK: - Phone (DB + heuristic + noData gray)
 
     func runPhoneScan() async -> ScanResult? {
         let cleaned = phoneDigits.filter { "0123456789+".contains($0) }
@@ -190,33 +201,40 @@ final class ScanViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        let dbResult = await riskService.scan(type: .phone, input: cleaned)
+        let dbResult = await riskService.scanDBOnly(type: .phone, input: cleaned)
 
-        var reasons = dbResult.reasons
-        var level = dbResult.level
+        // heuristic
+        var heuristic: [String] = []
+        heuristic.append("Heuristic: ตรวจรูปแบบหมายเลขโทรศัพท์")
+        heuristic.append("• จำนวนตัวเลข: \(numericOnly.count)")
+        if Set(numericOnly).count <= 2 { heuristic.append("• เลขซ้ำ/แพทเทิร์นแปลก (น่าสงสัย)") }
 
         if let meta = phoneValidator.validate(cleaned) {
-            reasons.append("ประเภท: \(meta.typeDescription)")
-            reasons.append("เครือข่าย: \(meta.carrier)")
-            reasons.append("พื้นที่: \(meta.origin)")
-
-            if meta.isHighRiskPattern {
-                level = max(level, .medium)
-                reasons.append("รูปแบบหมายเลขผิดปกติ (เลขซ้ำ/คล้ายสร้างขึ้น)")
-            }
-            if meta.isVerifiedService {
-                level = .low
-                reasons.append("เป็นเบอร์หน่วยงานที่อยู่ใน whitelist")
-            }
+            heuristic.append("• ประเภท: \(meta.typeDescription)")
+            heuristic.append("• เครือข่าย: \(meta.carrier)")
+            heuristic.append("• พื้นที่: \(meta.origin)")
+            if meta.isHighRiskPattern { heuristic.append("• ลักษณะเข้าข่ายเบอร์สร้างขึ้น/เบอร์หลอก") }
+            if meta.isVerifiedService { heuristic.append("• อยู่ใน whitelist/บริการที่เชื่อถือได้") }
         }
 
         isLoading = false
-        let result = ScanResult(type: .phone, input: cleaned, level: level, reasons: reasons.uniquedPreservingOrder())
-        history.add(result)
-        return result
+
+        if dbResult.reasons.contains(RiskService.noDataReason) {
+            // ✅ ไม่พบ DB -> เทา แต่โชว์ heuristic
+            let reasons = ([RiskService.noDataReason] + heuristic).uniquedPreservingOrder()
+            let result = ScanResult(type: .phone, input: cleaned, level: .low, reasons: reasons)
+            history.add(result)
+            return result
+        } else {
+            // พบใน DB -> red/high (+ heuristic ต่อท้าย)
+            let reasons = (dbResult.reasons + heuristic).uniquedPreservingOrder()
+            let result = ScanResult(type: .phone, input: cleaned, level: dbResult.level, reasons: reasons)
+            history.add(result)
+            return result
+        }
     }
 
-    // MARK: - Generic scan (URL / QR / SMS)
+    // MARK: - URL / QR / SMS / Text (DB + heuristic + noData gray)
 
     func runScan() async -> ScanResult? {
         let input = normalizedInputForScan()
@@ -228,41 +246,95 @@ final class ScanViewModel: ObservableObject {
         switch selectedType {
         case .url, .qr:
             let analysis = urlAnalyzer.analyze(input)
-            let dbResult = await riskService.scan(type: .url, input: analysis.normalizedUrl)
-
-            let finalLevel = max(analysis.level, dbResult.level)
-            let mergedReasons = (analysis.reasons + dbResult.reasons).uniquedPreservingOrder()
+            let db = await riskService.scanDBOnly(type: .url, input: analysis.normalizedUrl)
 
             isLoading = false
-            let result = ScanResult(type: selectedType, input: analysis.normalizedUrl, level: finalLevel, reasons: mergedReasons)
-            history.add(result)
-            return result
+
+            if db.reasons.contains(RiskService.noDataReason) {
+                // ✅ NO DATA (เทา) + แสดง heuristic
+                var reasons = [RiskService.noDataReason]
+                reasons.append(contentsOf: analysis.reasons)
+
+                // ✅ กัน human error: ถ้า heuristic สูง ให้ขึ้นคำเตือนเด่น
+                if analysis.level != .low {
+                    reasons.insert("⚠️ คำเตือน: แม้ไม่มีข้อมูลในระบบ แต่รูปแบบลิงก์เข้าข่ายความเสี่ยง \(analysis.level == .high ? "สูง" : "ปานกลาง")", at: 1)
+                }
+
+                // level เก็บ heuristic เพื่อเอาไปตัดสินแบนเนอร์ แต่ UI ยังเป็นเทาเพราะมี noDataReason
+                let result = ScanResult(type: selectedType, input: analysis.normalizedUrl, level: analysis.level, reasons: reasons.uniquedPreservingOrder())
+                history.add(result)
+                return result
+            } else {
+                // ✅ พบใน DB -> SCAM + heuristic
+                let reasons = (db.reasons + analysis.reasons).uniquedPreservingOrder()
+                let level = max(db.level, analysis.level)
+                let result = ScanResult(type: selectedType, input: analysis.normalizedUrl, level: level, reasons: reasons)
+                history.add(result)
+                return result
+            }
+
 
         case .sms, .text:
             let sms = smsAnalyzer.analyze(input)
             var reasons = sms.reasons
-            var finalLevel = sms.level
 
-            if let firstUrl = sms.extractedUrls.first {
-                let urlAnalysis = urlAnalyzer.analyze(firstUrl)
-                let dbResult = await riskService.scan(type: .url, input: urlAnalysis.normalizedUrl)
+            // ถ้ามี URL ในข้อความ ตรวจ URL ตัวแรกด้วย URL analyzer + DB
+            if let first = sms.extractedUrls.first {
+                let normalized = normalizeUrlInput(first)
+                let urlAnalysis = urlAnalyzer.analyze(normalized)
+                let db = await riskService.scanDBOnly(type: .url, input: urlAnalysis.normalizedUrl)
 
-                finalLevel = max(finalLevel, max(urlAnalysis.level, dbResult.level))
-                reasons.append("ลิงก์ที่พบ: \(urlAnalysis.normalizedUrl)")
-                reasons.append(contentsOf: urlAnalysis.reasons)
-                reasons.append(contentsOf: dbResult.reasons)
+                isLoading = false
+
+                if db.reasons.contains(RiskService.noDataReason) {
+                    // ✅ NO DATA (เทา) + heuristic ข้อความ + heuristic URL
+                    var merged: [String] = [RiskService.noDataReason]
+                    merged.append(contentsOf: reasons)
+                    merged.append("ลิงก์ที่พบ: \(urlAnalysis.normalizedUrl)")
+                    merged.append(contentsOf: urlAnalysis.reasons)
+
+                    let worstHeuristic = max(sms.level, urlAnalysis.level)
+                    if worstHeuristic != .low {
+                        merged.insert("⚠️ คำเตือน: แม้ไม่มีข้อมูลในระบบ แต่ข้อความ/ลิงก์เข้าข่ายความเสี่ยง \(worstHeuristic == .high ? "สูง" : "ปานกลาง")", at: 1)
+                    }
+
+                    let result = ScanResult(type: .sms, input: input, level: worstHeuristic, reasons: merged.uniquedPreservingOrder())
+                    history.add(result)
+                    return result
+                } else {
+                    // ✅ พบใน DB -> SCAM + heuristic
+                    var merged = db.reasons
+                    merged.append(contentsOf: reasons)
+                    merged.append("ลิงก์ที่พบ: \(urlAnalysis.normalizedUrl)")
+                    merged.append(contentsOf: urlAnalysis.reasons)
+
+                    let level = max(db.level, max(sms.level, urlAnalysis.level))
+                    let result = ScanResult(type: .sms, input: input, level: level, reasons: merged.uniquedPreservingOrder())
+                    history.add(result)
+                    return result
+                }
             }
 
+            // ไม่มี URL -> NO DATA (เทา) + heuristic ข้อความ
             isLoading = false
-            let result = ScanResult(type: .sms, input: input, level: finalLevel, reasons: reasons.uniquedPreservingOrder())
+            var merged: [String] = [RiskService.noDataReason]
+            merged.append(contentsOf: reasons)
+
+            if sms.level != .low {
+                merged.insert("⚠️ คำเตือน: แม้ไม่มีข้อมูลในระบบ แต่รูปแบบข้อความเข้าข่ายความเสี่ยง \(sms.level == .high ? "สูง" : "ปานกลาง")", at: 1)
+            }
+
+            let result = ScanResult(type: .sms, input: input, level: sms.level, reasons: merged.uniquedPreservingOrder())
             history.add(result)
             return result
 
+
         default:
-            let r = await riskService.scan(type: selectedType, input: input)
+            // fallback: DB only + no heuristic
+            let db = await riskService.scanDBOnly(type: selectedType, input: input)
             isLoading = false
-            history.add(r)
-            return r
+            history.add(db)
+            return db
         }
     }
 }

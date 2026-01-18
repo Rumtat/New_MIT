@@ -10,137 +10,17 @@ import SwiftUI
 
 struct BankResultView: View {
     let result: ScanResult
-    @Environment(\.dismiss) private var dismiss
 
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // 1. ส่วนแสดงสถานะความเสี่ยงหลัก
-                statusHeaderSection
-
-                // 2. รายละเอียดบัญชีที่ตรวจสอบ
-                VStack(spacing: 0) {
-                    detailRow(title: "เลขบัญชี/พร้อมเพย์", value: result.input)
-                    
-                    if let bank = result.bankName {
-                        Divider().padding(.vertical, 10)
-                        detailRow(title: "ธนาคาร", value: bank)
-                    }
-                    
-                    if let owner = result.ownerName {
-                        Divider().padding(.vertical, 10)
-                        detailRow(title: "ชื่อเจ้าของบัญชี", value: owner)
-                    }
-                }
-                .padding()
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemGroupedBackground)))
-                .padding(.horizontal)
-
-                // 3. รายละเอียดเหตุผลจากการตรวจสอบ (ดึงข้อมูลจาก Array ใน Firestore)
-                VStack(alignment: .leading, spacing: 15) {
-                    HStack {
-                        Image(systemName: "list.bullet.clipboard.fill")
-                        Text("รายละเอียดการตรวจสอบ")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                    
-                    if result.reasons.isEmpty || result.level == .low {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("ไม่พบประวัติการทุจริตในฐานข้อมูลปัจจุบัน")
-                                .font(.subheadline)
-                        }
-                    } else {
-                        ForEach(result.reasons, id: \.self) { reason in
-                            HStack(alignment: .top, spacing: 10) {
-                                Text("•")
-                                    .bold()
-                                    .foregroundColor(statusColor)
-                                Text(reason)
-                                    .font(.subheadline)
-                                    .lineSpacing(4)
-                            }
-                        }
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemGroupedBackground)))
-                .padding(.horizontal)
-
-                // 4. คำแนะนำเพิ่มเติมตามระดับความเสี่ยง
-                adviceSection
-            }
-            .padding(.bottom, 30)
-        }
-        .navigationTitle("ผลการตรวจสอบ")
-        .navigationBarTitleDisplayMode(.inline)
-        .background(Color(.systemGroupedBackground))
+    private var isNoData: Bool {
+        result.reasons.contains(RiskService.noDataReason)
     }
 
-    // MARK: - Helper Views
-
-    private var statusHeaderSection: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(statusColor.opacity(0.1))
-                    .frame(width: 100, height: 100)
-                
-                Image(systemName: statusIcon)
-                    .font(.system(size: 50, weight: .bold))
-                    .foregroundColor(statusColor)
-            }
-            
-            VStack(spacing: 4) {
-                Text(result.level.displayTitle)
-                    .font(.title2.bold())
-                    .foregroundColor(statusColor)
-                
-                Text(statusSubTitle)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.top, 20)
+    private var isUnknown: Bool {
+        result.reasons.contains("ไม่สามารถตรวจสอบได้เนื่องจากไม่พบที่อยู่ของเว็บไซต์")
     }
 
-    private var adviceSection: some View {
-        VStack {
-            if result.level != .low {
-                HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.shield.fill")
-                        .font(.title2)
-                    Text("คำเตือน: โปรดระมัดระวังเป็นพิเศษก่อนดำเนินการโอนเงินไปยังบัญชีนี้ หากไม่แน่ใจควรตรวจสอบผ่านช่องทางหลักของธนาคารอีกครั้ง")
-                        .font(.caption)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding()
-                .background(statusColor.opacity(0.1))
-                .foregroundColor(statusColor)
-                .cornerRadius(12)
-                .padding(.horizontal)
-            }
-        }
-    }
-
-    private func detailRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
-                .font(.subheadline.bold())
-                .foregroundColor(.primary)
-        }
-    }
-
-    // MARK: - Computed Properties
-
-    private var statusColor: Color {
+    private var accent: Color {
+        if isNoData || isUnknown { return .gray }
         switch result.level {
         case .low: return .green
         case .medium: return .orange
@@ -148,19 +28,102 @@ struct BankResultView: View {
         }
     }
 
-    private var statusIcon: String {
+    private var headline: String {
+        if isUnknown { return "ไม่สามารถตรวจสอบได้" }
+        if isNoData { return "ไม่มีข้อมูลในระบบ" }
         switch result.level {
-        case .low: return "checkmark.shield.fill"
-        case .medium: return "exclamationmark.triangle.fill"
-        case .high: return "shield.exclamationmark.fill"
+        case .low: return "ปลอดภัย"
+        case .medium: return "มีความเสี่ยง"
+        case .high: return "ไม่ปลอดภัย"
         }
     }
 
-    private var statusSubTitle: String {
-        switch result.level {
-        case .low: return "ตรวจสอบแล้ว ไม่พบความเสี่ยง"
-        case .medium: return "พบข้อมูลบางส่วนที่ควรระวัง"
-        case .high: return "พบข้อมูลการทุจริตในฐานข้อมูล"
+    private var displayNameLine: String {
+        // ถ้ามีข้อมูลธนาคาร/ชื่อผู้รับให้โชว์ (ถ้า ScanResult มีฟิลด์เหล่านี้)
+        let parts = [result.bankName, result.ownerName].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? "" : parts.joined(separator: " • ")
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+
+                VStack(spacing: 10) {
+                    Circle()
+                        .fill(accent.opacity(0.12))
+                        .frame(width: 120, height: 120)
+
+                    Text(headline)
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(accent)
+
+                    Text(result.input)
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    if !displayNameLine.isEmpty {
+                        Text(displayNameLine)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 10)
+
+                if !result.reasons.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass.circle.fill")
+                                .foregroundStyle(Color.blue)
+                            Text("ข้อมูลเชิงลึก")
+                                .font(.headline)
+                                .foregroundStyle(Color.blue)
+                        }
+
+                        Divider()
+
+                        ForEach(result.reasons.indices, id: \.self) { i in
+                            HStack(alignment: .top, spacing: 10) {
+                                Text("•")
+                                Text(result.reasons[i])
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.blue.opacity(0.08))
+                    )
+                    .padding(.horizontal, 16)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ผลการวิเคราะห์ความเสี่ยง")
+                        .font(.headline)
+
+                    HStack(spacing: 10) {
+                        Image(systemName: (isNoData || isUnknown) ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                            .foregroundStyle(accent)
+
+                        Text(isNoData ? RiskService.noDataReason : headline)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+
+                        Spacer()
+                    }
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
+                .padding(.horizontal, 16)
+
+                Spacer(minLength: 24)
+            }
         }
+        .navigationTitle("ผลการสแกนบัญชี")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

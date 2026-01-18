@@ -5,7 +5,6 @@
 //  Created by Vituruch Sinthusate on 11/1/2569 BE.
 //
 
-
 import SwiftUI
 
 struct RecentSection: View {
@@ -15,67 +14,62 @@ struct RecentSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+
             HStack {
-                Text("Recent Scan")
-                    .font(.headline)
-                
                 Spacer()
-                
                 if !items.isEmpty {
                     Button(action: onClear) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Image(systemName: "trash")
                             Text("Clear")
                         }
                         .font(.caption2).bold()
-                        .foregroundColor(.red.opacity(0.8))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(6)
+                        .foregroundColor(.red.opacity(0.85))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.10))
+                        .cornerRadius(10)
                     }
+                    .padding(.horizontal, 16)
                 }
             }
-            .padding(.horizontal, 16)
 
             VStack(spacing: 10) {
                 ForEach(items.prefix(5)) { r in
                     let isUnknown = r.reasons.contains("ไม่สามารถตรวจสอบได้เนื่องจากไม่พบที่อยู่ของเว็บไซต์")
-                    
+                    let isNoData = r.reasons.contains(RiskService.noDataReason)
+
                     Button { onTap(r) } label: {
                         HStack(spacing: 12) {
-                            // ✅ ปรับสีวงกลมด้านหน้าตามระดับความเสี่ยง
                             Circle()
                                 .frame(width: 14, height: 14)
-                                .foregroundStyle(isUnknown ? .gray : (r.level == .low ? .green : (r.level == .medium ? .orange : .red)))
+                                .foregroundStyle((isUnknown || isNoData) ? .gray : dotColor(for: r.level))
                                 .opacity(0.9)
-                            
+
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(r.input).font(.subheadline).bold().lineLimit(1)
                                 Text(r.timestamp.formatted(date: .numeric, time: .shortened))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
-                            
+
                             Spacer()
-                            
-                            // ✅ ปรับป้ายสถานะ (Pill) ให้รองรับ UNKNOWN
+
                             if isUnknown {
-                                Text("UNKNOWN")
-                                    .font(.caption2).bold()
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.gray.opacity(0.15))
-                                    .foregroundStyle(.gray)
-                                    .cornerRadius(8)
+                                pillGray("UNKNOWN")
+                            } else if isNoData {
+                                pillGray("NO DATA")
                             } else {
-                                StatusPill(level: r.level)
+                                StatusPill(level: r.level) // ใช้ตัวเดิมในโปรเจกต์
                             }
                         }
                         .padding(14)
                         .background(
                             RoundedRectangle(cornerRadius: 14)
-                                .fill(isUnknown ? Color.gray.opacity(0.08) : background(for: r.level)) // ✅ พื้นหลังสีเทาเมื่อ Unknown
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(isUnknown ? Color.gray.opacity(0.2) : border(for: r.level), lineWidth: 1))
+                                .fill((isUnknown || isNoData) ? Color.gray.opacity(0.08) : background(for: r.level))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke((isUnknown || isNoData) ? Color.gray.opacity(0.2) : border(for: r.level), lineWidth: 1)
+                                )
                         )
                         .padding(.horizontal, 16)
                     }
@@ -84,9 +78,29 @@ struct RecentSection: View {
 
                 if items.isEmpty {
                     Text("ยังไม่มีประวัติการสแกน")
-                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
                 }
             }
+        }
+    }
+
+    private func pillGray(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2).bold()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.gray.opacity(0.15))
+            .foregroundStyle(.gray)
+            .cornerRadius(10)
+    }
+
+    private func dotColor(for level: RiskLevel) -> Color {
+        switch level {
+        case .low: return .green
+        case .medium: return .orange
+        case .high: return .red
         }
     }
 

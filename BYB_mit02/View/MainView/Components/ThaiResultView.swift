@@ -8,63 +8,17 @@ import SwiftUI
 struct ThaiResultView: View {
     let result: ScanResult
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(titleLine)
-                    .font(.title2).bold()
-                    .foregroundStyle(color)
-
-                Text(labelLine)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                RecommendationCard(level: result.level)
-
-                if result.type == .url || result.type == .qr, !isInvalidFormat {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("ภาพตัวอย่างหน้าเว็บ").font(.headline)
-
-                        let previewURL = "https://image.thum.io/get/width/600/crop/800/\(result.input.hasPrefix("http") ? result.input : "https://" + result.input)"
-
-                        AsyncImage(url: URL(string: previewURL)) { image in
-                            image.resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 180).clipped().cornerRadius(12)
-                        } placeholder: {
-                            Rectangle().fill(Color.gray.opacity(0.1))
-                                .frame(height: 180).overlay(ProgressView()).cornerRadius(12)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-
-                if !result.reasons.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(reasonHeader).font(.headline)
-                        ForEach(result.reasons, id: \.self) { reason in
-                            HStack(alignment: .top) {
-                                Text("•").bold()
-                                Text(reason).font(.body)
-                            }
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground)))
-                }
-            }
-            .padding(16)
-        }
-        .navigationTitle("Result")
-    }
-
-    private var isInvalidFormat: Bool {
+    private var isUnknown: Bool {
         result.reasons.contains("ไม่สามารถตรวจสอบได้เนื่องจากไม่พบที่อยู่ของเว็บไซต์")
     }
 
-    private var color: Color {
-        if isInvalidFormat { return .gray }
+    private var isNoData: Bool {
+        result.reasons.contains(RiskService.noDataReason)
+    }
+
+    private var accent: Color {
+        if isUnknown { return .gray }
+        if isNoData { return .gray }
         switch result.level {
         case .low: return .green
         case .medium: return .orange
@@ -72,71 +26,105 @@ struct ThaiResultView: View {
         }
     }
 
-    private var titleLine: String {
-        if isInvalidFormat { return "ไม่สามารถตรวจสอบได้" }
-        return result.level.displayTitle
-    }
-
-    private var reasonHeader: String {
-        if isInvalidFormat { return "เหตุผล" }
+    private var headline: String {
+        if isUnknown { return "ไม่สามารถตรวจสอบได้" }
+        if isNoData { return "ไม่มีข้อมูลในระบบ" }
         switch result.level {
-        case .low: return "รายละเอียด"
-        case .medium, .high: return "พบความเสี่ยงเนื่องจาก:"
+        case .low: return "ปลอดภัย"
+        case .medium: return "มีความเสี่ยง"
+        case .high: return "ไม่ปลอดภัย"
         }
     }
-
-    private var labelLine: String {
-        switch result.type {
-        case .sms, .text:
-            return "ข้อความ: \(result.input)"
-        case .qr:
-            return "ข้อมูล QR: \(result.input)"
-        default:
-            return "ลิงก์: \(result.input)"
-        }
-    }
-}
-
-private struct RecommendationCard: View {
-    let level: RiskLevel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("คำแนะนำ")
-                .font(.headline)
+        ScrollView {
+            VStack(spacing: 16) {
 
-            ForEach(recommendations, id: \.self) { line in
-                HStack(alignment: .top) {
-                    Text("•").bold()
-                    Text(line)
+                VStack(spacing: 10) {
+                    Image(systemName: isNoData || isUnknown ? "questionmark.circle.fill" : (result.level == .high ? "xmark.octagon.fill" : (result.level == .medium ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")))
+                        .font(.system(size: 54, weight: .bold))
+                        .foregroundStyle(accent)
+
+                    Text(headline)
+                        .font(.system(size: 28, weight: .bold))
+                        .multilineTextAlignment(.center)
+
+                    Text(result.input)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
                 }
+                .padding(.top, 18)
+
+                // แสดงเหตุผล (รวม heuristic)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("รายละเอียดการประเมิน")
+                        .font(.headline)
+
+                    if result.reasons.isEmpty {
+                        Text("ไม่มีรายละเอียด")
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                    } else {
+                        ForEach(result.reasons.indices, id: \.self) { i in
+                            HStack(alignment: .top, spacing: 10) {
+                                Circle()
+                                    .frame(width: 8, height: 8)
+                                    .foregroundStyle(accent.opacity(0.8))
+                                    .padding(.top, 6)
+
+                                Text(result.reasons[i])
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
+                .padding(.horizontal, 16)
+
+                // คำแนะนำ
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("คำแนะนำ")
+                        .font(.headline)
+
+                    Text(adviceText())
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
+                .padding(.horizontal, 16)
+
+                Spacer(minLength: 20)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground)))
+        .navigationTitle("ผลการตรวจสอบ")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var recommendations: [String] {
-        switch level {
+    private func adviceText() -> String {
+        if isNoData {
+            return "ระบบยังไม่มีข้อมูลรายการนี้ในฐานข้อมูล แนะนำตรวจสอบเพิ่มเติมจากแหล่งทางการ และอย่ากรอกข้อมูลส่วนตัวหากไม่มั่นใจ"
+        }
+        if isUnknown {
+            return "ไม่สามารถตรวจสอบได้ในขณะนี้ ลองตรวจสอบใหม่อีกครั้ง หรือเช็กการเชื่อมต่ออินเทอร์เน็ต"
+        }
+        switch result.level {
         case .low:
-            return [
-                "ตรวจสอบโดเมนและสะกดชื่อเว็บให้ถูกต้อง",
-                "หลีกเลี่ยงการกรอกข้อมูลสำคัญ หากไม่มั่นใจ",
-                "ถ้าได้รับจากแชท/ข้อความ ให้ถามผู้ส่งยืนยันอีกครั้ง"
-            ]
+            return "ยังไม่พบความเสี่ยงเด่นชัด แต่ควรตรวจสอบผู้ส่ง/แหล่งที่มาให้แน่ใจก่อนดำเนินการ"
         case .medium:
-            return [
-                "อย่ากรอกข้อมูลส่วนตัว/รหัสผ่าน/OTP",
-                "ลองค้นชื่อโดเมนหรือชื่อเว็บเพิ่มก่อนทำรายการ",
-                "หากเกี่ยวกับการเงิน แนะนำติดต่อหน่วยงาน/ธนาคารโดยตรง"
-            ]
+            return "พบปัจจัยเสี่ยงบางอย่าง ควรหลีกเลี่ยงการกรอกข้อมูลส่วนตัว/OTP และตรวจสอบกับแหล่งทางการ"
         case .high:
-            return [
-                "หยุดดำเนินการทันที และอย่ากดลิงก์ซ้ำ",
-                "หากกรอกข้อมูลไปแล้ว ให้เปลี่ยนรหัสผ่านและแจ้งธนาคาร",
-                "บันทึกหลักฐาน (สกรีนช็อต/ข้อความ) และทำรายงานในแอป"
-            ]
+            return "มีความเสี่ยงสูง แนะนำหยุดดำเนินการทันที ไม่กรอกข้อมูล/ไม่โอนเงิน และรายงานหากพบความผิดปกติ"
         }
     }
 }

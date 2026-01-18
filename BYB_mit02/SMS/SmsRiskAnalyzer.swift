@@ -6,80 +6,149 @@
 //
 
 
-//
-//  SmsRiskAnalyzer.swift
-//  BYB_mit02
-//
-//  Heuristic checks for SMS / message text.
-//
-
 import Foundation
 
-struct SmsRiskAnalyzer {
-    struct Analysis {
-        let level: RiskLevel
-        let reasons: [String]
-        let extractedUrls: [String]
-    }
+struct SmsAnalysisResult {
+    let level: RiskLevel
+    let reasons: [String]
+    let extractedUrls: [String]
+    let extractedPhones: [String]
+    let extractedBankAccounts: [String]
+}
 
-    func analyze(_ text: String) -> Analysis {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return .init(level: .medium, reasons: ["กรุณาวางข้อความ"], extractedUrls: [])
+final class SmsRiskAnalyzer {
+
+    func analyze(_ text: String) -> SmsAnalysisResult {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else {
+            return SmsAnalysisResult(level: .low, reasons: ["Heuristic: ข้อความว่าง"], extractedUrls: [], extractedPhones: [], extractedBankAccounts: [])
         }
 
-        let urls = extractUrls(from: trimmed)
-
         var score = 0
-        var reasons: [String] = []
+        var reasons: [String] = ["Heuristic: วิเคราะห์ข้อความ (SMS/Text)"]
 
-        let patterns = [
-            ("ด่วน", 1), ("ระงับ", 1), ("ยืนยัน", 1), ("ปรับปรุง", 1),
-            ("ของรางวัล", 2), ("พัสดุ", 1), ("ชำระ", 1), ("คืนเงิน", 1),
-            ("OTP", 2), ("รหัส", 1), ("บัญชี", 1), ("ธนาคาร", 1)
-        ]
+        let lower = s.lowercased()
 
-        for (k, w) in patterns {
-            if trimmed.localizedCaseInsensitiveContains(k) {
-                score += w
+        // Urgency / pressure
+        let urgencyWords = ["ด่วน", "ภายใน", "ทันที", "เร่งด่วน", "จะถูกระงับ", "บัญชีถูกระงับ", "ภายใน 24", "ภายใน24", "ภายใน 1", "วันนี้เท่านั้น"]
+        if urgencyWords.contains(where: { lower.contains($0.replacingOccurrences(of: " ", with: "")) }) || urgencyWords.contains(where: { lower.contains($0) }) {
+            score += 15
+            reasons.append("• พบคำกดดัน/เร่งเวลา → เสี่ยง")
+        }
+
+        // Requesting sensitive info
+        let sensitiveWords = ["otp", "รหัส", "รหัสผ่าน", "password", "pin", "เลขบัตร", "cvv", "โค้ด", "ยืนยันตัวตน", "ยืนยันบัญชี"]
+        if sensitiveWords.contains(where: { lower.contains($0) }) {
+            score += 25
+            reasons.append("• พบการขอข้อมูลสำคัญ (OTP/รหัส/ยืนยันตัวตน) → เสี่ยงสูง")
+        }
+
+        // Impersonation
+        let impersonationWords = ["ธนาคาร", "ตำรวจ", "สรรพากร", "ขนส่ง", "ไปรษณีย์", "กรม", "ศาล", "kbank", "scb", "bbl", "ktb", "bay", "gsb", "promptpay"]
+        if impersonationWords.contains(where: { lower.contains($0.lowercased()) }) {
+            score += 10
+            reasons.append("• มีคำแอบอ้างหน่วยงาน/ธนาคาร → ระวัง")
+        }
+
+        // Money lure
+        let lureWords = ["เงินคืน", "refund", "รับเงิน", "โบนัส", "reward", "prize", "ของรางวัล", "คูปอง", "เครดิตฟรี"]
+        if lureWords.contains(where: { lower.contains($0) }) {
+            score += 10
+            reasons.append("• พบการล่อให้กด/รับเงิน/รางวัล → ระวัง")
+        }
+
+        // Extract URLs
+        let urls = extractUrls(from: s)
+        if !urls.isEmpty {
+            score += 10
+            reasons.append("• พบลิงก์ในข้อความ \(urls.count) ลิงก์")
+        }
+
+        // Extract phones (simple)
+        let phones = extractPhones(from: s)
+        if !phones.isEmpty {
+            reasons.append("• พบเบอร์โทรในข้อความ \(phones.count) รายการ")
+        }
+
+        // Extract bank-like digit runs
+        let bankAccounts = extractBankAccounts(from: s)
+        if !bankAccounts.isEmpty {
+            reasons.append("• พบเลขบัญชี/เลขอ้างอิงที่เป็นตัวเลขยาว \(bankAccounts.count) รายการ")
+        }
+
+        // If link + sensitive -> very high
+        if !urls.isEmpty && sensitiveWords.contains(where: { lower.contains($0) }) {
+            score += 20
+            reasons.append("• พบลิงก์ + ขอข้อมูลสำคัญ พร้อมกัน → เสี่ยงสูงมาก")
+        }
+
+        let level: RiskLevel
+        if score >= 55 { level = .high }
+        else if score >= 25 { level = .medium }
+        else { level = .low }
+
+        reasons.append("• คะแนนความเสี่ยง (Heuristic): \(score)")
+
+        return SmsAnalysisResult(
+            level: level,
+            reasons: reasons,
+            extractedUrls: urls,
+            extractedPhones: phones,
+            extractedBankAccounts: bankAccounts
+        )
+    }
+
+    // MARK: - Helpers
+
+    private func extractUrls(from text: String) -> [String] {
+        // ดึง URL แบบง่าย (http/https หรือโดเมนที่มี dot)
+        // เน้นกัน human error: วางข้อความมั่ว ๆ ก็ยังดึงได้
+        var results: [String] = []
+
+        // 1) http(s)://...
+        let pattern1 = #"https?:\/\/[^\s]+"#
+        if let regex = try? NSRegularExpression(pattern: pattern1, options: .caseInsensitive) {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            for m in regex.matches(in: text, options: [], range: range) {
+                if let r = Range(m.range, in: text) {
+                    results.append(String(text[r]))
+                }
             }
         }
 
-        if score >= 3 {
-            reasons.append("ข้อความมีคำ/รูปแบบที่พบบ่อยในมิจฉาชีพ")
+        // 2) bare domain like example.com/path
+        let pattern2 = #"(?:^|\s)([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?"#
+        if let regex2 = try? NSRegularExpression(pattern: pattern2, options: .caseInsensitive) {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            for m in regex2.matches(in: text, options: [], range: range) {
+                if let r = Range(m.range, in: text) {
+                    let token = text[r].trimmingCharacters(in: .whitespacesAndNewlines)
+                    // กันซ้ำกับ http
+                    if !token.lowercased().hasPrefix("http") {
+                        results.append(token)
+                    }
+                }
+            }
         }
 
-        if !urls.isEmpty {
-            score += 2
-            reasons.append("พบลิงก์ภายในข้อความ")
-        }
-
-        let level: RiskLevel
-        if score >= 5 {
-            level = .high
-        } else if score >= 2 {
-            level = .medium
-        } else {
-            level = .low
-        }
-
-        if reasons.isEmpty {
-            reasons = ["ไม่พบรูปแบบเสี่ยงเด่นชัด"]
-        }
-
-        return .init(level: level, reasons: reasons, extractedUrls: urls)
+        return Array(Set(results)).sorted()
     }
 
-    private func extractUrls(from text: String) -> [String] {
-        let pattern = "(?i)\\b((?:https?://)?(?:[a-z0-9-]+\\.)+[a-z]{2,}(?:/[^\\s]*)?)\\b"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        let matches = regex.matches(in: text, range: range)
-        return matches.compactMap { m in
-            guard let r = Range(m.range(at: 1), in: text) else { return nil }
-            return String(text[r])
-        }
-        .prefix(5)
-        .map { $0 }
+    private func extractPhones(from text: String) -> [String] {
+        // ดึงตัวเลข 9-15 หลัก (แบบง่าย) เพื่อกันพลาดตอนวางข้อความ
+        let digits = text.map { $0.isNumber ? $0 : " " }
+        let chunks = String(digits).split(separator: " ").map(String.init)
+
+        let candidates = chunks.filter { $0.count >= 9 && $0.count <= 15 }
+        return Array(Set(candidates)).sorted()
+    }
+
+    private func extractBankAccounts(from text: String) -> [String] {
+        // ดึงชุดตัวเลขยาว 10-15 หลัก (พอเหมาะกับเลขบัญชี/เลขอ้างอิง)
+        let digits = text.map { $0.isNumber ? $0 : " " }
+        let chunks = String(digits).split(separator: " ").map(String.init)
+
+        let candidates = chunks.filter { $0.count >= 10 && $0.count <= 15 }
+        return Array(Set(candidates)).sorted()
     }
 }

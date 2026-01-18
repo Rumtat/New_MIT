@@ -5,112 +5,214 @@
 //  Created by Vituruch Sinthusate on 15/1/2569 BE.
 //
 
-import SwiftUI
+//
+//  OnboardingStep.swift
+//  BYB_mit02
+//
+//  Onboarding แบบใช้ “รูปภาพจริง” จาก Assets
+//
 
-// ✅ 1. ย้ายโครงสร้างข้อมูลออกมาไว้ด้านนอกเพื่อให้ทุกส่วนเรียกใช้ได้
+import SwiftUI
+import UIKit
+
+// MARK: - Model
+
 struct OnboardingStep: Identifiable {
     let id = UUID()
     let title: String
     let description: String
-    let icon: String
-    let color: Color
+
+    /// ชื่อรูปใน Assets.xcassets (คุณเอารูปมาใส่เอง)
+    let imageName: String
+
+    /// (Optional) ถ้าอยากมีปุ่มด้านล่างบางหน้าชื่อพิเศษ
+    var primaryButtonTitle: String? = nil
 }
+
+// MARK: - Main View
 
 struct UserGuideView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hasSeenOnboarding") var hasSeenOnboarding: Bool = false
+
     @State private var currentStep = 0
-    
-    // ✅ 2. ประกาศ steps เป็น Property ของ View เพื่อให้ TabView และ Button มองเห็น
-    let steps = [
-        OnboardingStep(
-            title: "สแกนลิงก์ (URL)",
-            description: "คัดลอกลิงก์ที่น่าสงสัยมาวางเพื่อตรวจสอบความเสี่ยงก่อนคลิก",
-            icon: "link.circle.fill",
-            color: Color(red: 0.12, green: 0.19, blue: 0.55)
+
+    // ✅ เปลี่ยนชื่อ imageName ให้ตรงกับรูปที่คุณจะใส่ใน Assets
+    private let steps: [OnboardingStep] = [
+        .init(
+            title: "แอปนี้ช่วยอะไรคุณ?",
+            description: "BYEMIT เปลี่ยนเครื่องมือช่วยตรวจสอบความเสี่ยงก่อนคลิก",
+            imageName: "onboard_1"
         ),
-        OnboardingStep(
-            title: "สแกนเบอร์โทรศัพท์",
-            description: "ตรวจสอบเบอร์โทรศัพท์มิจฉาชีพจากฐานข้อมูล  ของเรา",
-            icon: "phone.circle.fill",
-            color: .green
+        .init(
+            title: "เลือกรูปแบบการสแกน",
+            description: "เลือกการสแกนที่ต้องการจากปุ่มด้านล่าง",
+            imageName: "onboard_2"
         ),
-        OnboardingStep(
-            title: "ตรวจสอบบัญชีธนาคาร",
-            description: "เช็คเลขบัญชีหรือชื่อเจ้าของบัญชีก่อนโอนเงิน เพื่อความปลอดภัย",
-            icon: "banknote.circle.fill",
-            color: .orange
+        .init(
+            title: "ใส่ข้อมูลที่ต้องการตรวจสอบ",
+            description: "วางข้อมูลหรือเลือกวิธีที่สะดวก!",
+            imageName: "onboard_3"
         ),
-        OnboardingStep(
-            title: "สแกนใบหน้า (Face Scan)",
-            description: "ใช้ระบบ ตรวจสอบรูปภาพบุคคลว่ามีความเสี่ยงหรือไม่",
-            icon: "person.crop.rectangle.stack.fill",
-            color: .purple
+        .init(
+            title: "กด Scan เพื่อดูผลลัพธ์",
+            description: "เมื่อใส่ข้อมูลแล้ว กด Scan ได้เลย ระบบจะแจ้งผลทันที",
+            imageName: "onboard_4"
+        ),
+        .init(
+            title: "ดูประวัติการสแกน",
+            description: "หลังการสแกนคุณสามารถดูผลการสแกนล่าสุดได้ตลอดเวลา",
+            imageName: "onboard_5"
+        ),
+        .init(
+            title: "รายงานข้อมูลน่าสงสัย",
+            description: "ช่วยกันป้องกัน Scam ให้ทุกคน",
+            imageName: "onboard_6",
+            primaryButtonTitle: "REPORT SCAM"
+        ),
+        .init(
+            title: "เริ่มใช้งานเลย!",
+            description: "",
+            imageName: "onboard_7",
+            primaryButtonTitle: "เริ่มเลย"
         )
     ]
 
     var body: some View {
-        VStack {
-            // ปุ่มข้าม (Skip)
+        VStack(spacing: 0) {
+
+            // Top bar (ปุ่มข้าม)
             HStack {
                 Spacer()
                 Button("ข้าม") {
-                    hasSeenOnboarding = true
-                    dismiss()
+                    finish()
                 }
                 .foregroundStyle(.secondary)
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             }
 
-            // ส่วนแสดงเนื้อหาทีละ Step
             TabView(selection: $currentStep) {
-                ForEach(0..<steps.count, id: \.self) { index in
-                    VStack(spacing: 25) {
-                        Image(systemName: steps[index].icon)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 120, height: 120)
-                            .foregroundStyle(steps[index].color)
-                        
-                        Text(steps[index].title)
-                            .font(.title2.bold())
-                        
-                        Text(steps[index].description)
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                            .foregroundStyle(.secondary)
-                    }
-                    .tag(index)
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    OnboardingPage(step: step)
+                        .tag(index)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
-            
-            // ปุ่มนำทางด้านล่าง
+
+            // Bottom primary button
             Button {
                 if currentStep < steps.count - 1 {
-                    withAnimation { currentStep += 1 }
+                    withAnimation(.easeInOut) { currentStep += 1 }
                 } else {
-                    hasSeenOnboarding = true
-                    dismiss()
+                    finish()
                 }
             } label: {
-                Text(currentStep == steps.count - 1 ? "เริ่มใช้งานเลย" : "ถัดไป")
+                Text(buttonTitle)
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(Color(red: 0.12, green: 0.19, blue: 0.55)) // สีเดียวกับ UI หลัก
-                    .foregroundColor(.white)
+                    .background(Color(red: 0.12, green: 0.19, blue: 0.55))
+                    .foregroundStyle(.white)
                     .cornerRadius(16)
                     .padding(.horizontal, 20)
             }
-            .padding(.bottom, 40)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
         }
         .background(Color(.systemBackground))
     }
+
+    private var buttonTitle: String {
+        // ถ้าหน้ามีปุ่มเฉพาะ ให้ใช้ชื่อนั้น
+        if let custom = steps[currentStep].primaryButtonTitle {
+            // หน้าสุดท้ายให้ปิด onboarding
+            if currentStep == steps.count - 1 { return custom }
+            // หน้าอื่น ๆ (ถ้ามี) ใช้เป็นปุ่ม (แต่ยังเลื่อนไปหน้าถัดไป)
+            return custom
+        }
+        return (currentStep == steps.count - 1) ? "เริ่มเลย" : "ถัดไป"
+    }
+
+    private func finish() {
+        hasSeenOnboarding = true
+        dismiss()
+    }
 }
 
-// MARK: - Preview สำหรับตรวจสอบ UI
+// MARK: - Page UI
+
+private struct OnboardingPage: View {
+    let step: OnboardingStep
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer(minLength: 18)
+
+            // รูปหลัก (จาก Assets) — ถ้าไม่เจอรูป จะแสดง placeholder ให้รู้ว่าต้องใส่รูป
+            AssetImage(name: step.imageName)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 22)
+
+            VStack(spacing: 10) {
+                Text(step.title)
+                    .font(.system(size: 26, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 22)
+
+                if !step.description.isEmpty {
+                    Text(step.description)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                }
+            }
+
+            Spacer(minLength: 22)
+        }
+    }
+}
+
+// MARK: - Asset image helper (มี placeholder)
+
+private struct AssetImage: View {
+    let name: String
+
+    var body: some View {
+        Group {
+            if let ui = UIImage(named: name) {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                // Placeholder: คุณจะเห็นกรอบนี้ถ้ายังไม่ได้ใส่รูป/ชื่อไม่ตรง
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                    .foregroundStyle(.gray.opacity(0.35))
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundStyle(.gray.opacity(0.6))
+                            Text("รอใส่รูป")
+                                .font(.caption)
+                                .foregroundStyle(.gray.opacity(0.8))
+                            Text(name)
+                                .font(.caption2).bold()
+                                .foregroundStyle(.gray.opacity(0.9))
+                        }
+                        .padding(16)
+                    )
+                    .frame(height: 320)
+            }
+        }
+    }
+}
+
+// MARK: - Preview
+
 #Preview {
     UserGuideView()
 }
+
