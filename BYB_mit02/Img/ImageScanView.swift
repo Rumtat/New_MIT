@@ -9,8 +9,10 @@ import SwiftUI
 import PhotosUI
 
 struct ImageScanView: View {
-    @StateObject private var vm = ImageScannerViewModel()
-    @StateObject private var history = HistoryStore()
+
+    @StateObject private var viewModel = ImageScanViewModel()
+    @StateObject private var historyStore = ScanHistoryStore.shared
+
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
 
@@ -18,19 +20,19 @@ struct ImageScanView: View {
         VStack(spacing: 20) {
             TitleBlock(selectedType: .faceScan)
 
-            // ✅ ส่วนแสดงรูปภาพ (ถ้ามี URL จาก Firestore จะแสดงรูปนั้นทันที)
+            // MARK: - Image Preview
             ZStack {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(Color(.secondarySystemBackground))
                     .frame(height: 250)
-                
-                if !vm.mockImageUrl.isEmpty {
-                    // ดึงรูปจาก Imgur/เว็บนอก มาโชว์
-                    AsyncImage(url: URL(string: vm.mockImageUrl)) { image in
-                        image.resizable()
-                             .scaledToFit()
-                             .cornerRadius(15)
-                             .padding(10)
+
+                if !viewModel.previewImageURL.isEmpty {
+                    AsyncImage(url: URL(string: viewModel.previewImageURL)) { image in
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .cornerRadius(15)
+                            .padding(10)
                     } placeholder: {
                         ProgressView()
                     }
@@ -42,6 +44,7 @@ struct ImageScanView: View {
                 }
             }
 
+            // MARK: - Picker
             PhotosPicker(selection: $selectedItem, matching: .images) {
                 Label("เลือกรูปเพื่อตรวจสอบ", systemImage: "photo.badge.plus")
                     .font(.headline)
@@ -51,22 +54,33 @@ struct ImageScanView: View {
                     .cornerRadius(12)
             }
             .onChange(of: selectedItem) { newItem in
-                if let item = newItem { handleImageSelection(item) }
+                if let item = newItem {
+                    handleSelectedImage(item)
+                }
             }
 
-            // แสดงผลรายละเอียดสังเขป
-            if !vm.resultName.isEmpty {
+            // MARK: - Result
+            if !viewModel.resultTitle.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text(vm.resultName).font(.headline)
+                        Text(viewModel.resultTitle)
+                            .font(.headline)
+
                         Spacer()
-                        StatusPill(level: vm.riskLevel)
+
+                        StatusPill(riskLevel: viewModel.riskLevel)
                     }
-                    Text(vm.infoSummary).font(.caption).foregroundColor(.secondary)
-                    
+
+                    Text(viewModel.summaryText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
                     Divider()
-                    ForEach(vm.reasons, id: \.self) { r in
-                        Text("• \(r)").font(.caption2).foregroundColor(.secondary)
+
+                    ForEach(viewModel.reasons, id: \.self) { r in
+                        Text("• \(r)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
                     }
                 }
                 .padding()
@@ -74,19 +88,23 @@ struct ImageScanView: View {
                 .cornerRadius(15)
                 .shadow(radius: 2)
             }
+
             Spacer()
         }
         .padding()
     }
 
-    private func handleImageSelection(_ item: PhotosPickerItem) {
+    // MARK: - Helpers
+
+    private func handleSelectedImage(_ item: PhotosPickerItem) {
         Task {
             if let data = try? await item.loadTransferable(type: Data.self),
                let image = UIImage(data: data) {
-                self.selectedImage = image
-                // ✅ พอกดปุ่มปุ๊บ ให้ไปดึง Mock Data จาก Firestore มาโชว์เลย
-                if let result = await vm.fetchMockData(documentID: "test_scammer_01") {
-                    history.add(result)
+
+                selectedImage = image
+
+                if let result = await viewModel.scanMockFace(documentID: "test_scammer_01") {
+                    historyStore.add(result)
                 }
             }
         }

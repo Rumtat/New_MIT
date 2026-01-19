@@ -34,6 +34,16 @@
 		E452651E2F0EAE65006EB11E /* BYB_mit02UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BYB_mit02UITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E471A10E2F1E26F900317374 /* Exceptions for "BYB_mit02" folder in "BYB_mit02" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				File_mai_Chai/ScamRepository.swift,
+			);
+			target = E45265062F0EAE62006EB11E /* BYB_mit02 */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 		E430ADDD2F17362800EAEDB3 /* Exceptions for "BYB_mit02" folder in "Compile Sources" phase from "BYB_mit02" target */ = {
 			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
@@ -48,6 +58,7 @@
 		E45265092F0EAE62006EB11E /* BYB_mit02 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				E471A10E2F1E26F900317374 /* Exceptions for "BYB_mit02" folder in "BYB_mit02" target */,
 				E430ADDD2F17362800EAEDB3 /* Exceptions for "BYB_mit02" folder in "Compile Sources" phase from "BYB_mit02" target */,
 			);
 			path = BYB_mit02;

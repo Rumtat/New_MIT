@@ -2,66 +2,31 @@
 //  HistoryView.swift
 //  BYB_mit02
 //
+//
+//  ScanHistoryView.swift
+//  BYB_mit02
+//
 
 import SwiftUI
 
-@MainActor
-final class ScanHistory: ObservableObject {
-    @Published private(set) var items: [ScanResult] = []
-
-    private let key = "scan_history_v1"
-
-    init() { load() }
-
-    func add(_ result: ScanResult) {
-        withAnimation(.snappy) {
-            items.insert(result, at: 0)
-            if items.count > 80 { items = Array(items.prefix(80)) }
-        }
-        save()
-    }
-
-    func clear() {
-        withAnimation(.snappy) { items.removeAll() }
-        save()
-    }
-
-    func delete(_ item: ScanResult) {
-        withAnimation(.snappy) { items.removeAll { $0.id == item.id } }
-        save()
-    }
-
-    private func save() {
-        guard let data = try? JSONEncoder().encode(items) else { return }
-        UserDefaults.standard.set(data, forKey: key)
-    }
-
-    private func load() {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([ScanResult].self, from: data)
-        else { return }
-        items = decoded
-    }
-}
-
-struct HistoryView: View {
-    @ObservedObject var history: ScanHistory
-    var onTap: (ScanResult) -> Void
+struct ScanHistoryView: View {
+    @ObservedObject var historyStore: ScanHistoryStore
+    var onSelect: (ScanResult) -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if history.items.isEmpty {
+                if historyStore.items.isEmpty {
                     Text("ยังไม่มีประวัติการสแกน")
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                 } else {
-                    ForEach(history.items) { r in
+                    ForEach(historyStore.items) { r in
                         HistoryCard(
                             result: r,
-                            onDelete: { history.delete(r) },
-                            onTap: { onTap(r) }
+                            onDelete: { historyStore.delete(r) },
+                            onTap: { onSelect(r) }
                         )
                     }
                     .padding(.top, 8)
@@ -73,13 +38,13 @@ struct HistoryView: View {
         .navigationTitle("History")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .destructive) { history.clear() } label: {
+                Button(role: .destructive) { historyStore.clear() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "trash")
-                        Text("Clear")
+                        Text("กดเพื่อล้างข้อมูล")
                     }
                 }
-                .disabled(history.items.isEmpty)
+                .disabled(historyStore.items.isEmpty)
             }
         }
     }
@@ -118,7 +83,7 @@ private struct HistoryCard: View {
                 } else if isNoData {
                     pillGray("NO DATA")
                 } else {
-                    StatusPill(level: result.level) // ใช้ตัวเดิมที่มีอยู่แล้วในโปรเจกต์
+                    StatusPill(riskLevel: result.riskLevel)
                 }
 
                 Button(action: onDelete) {
@@ -156,7 +121,7 @@ private struct HistoryCard: View {
     }
 
     private var dotColor: Color {
-        switch result.level {
+        switch result.riskLevel {
         case .low: return .green
         case .medium: return .orange
         case .high: return .red
@@ -164,7 +129,7 @@ private struct HistoryCard: View {
     }
 
     private var bgColor: Color {
-        switch result.level {
+        switch result.riskLevel {
         case .low: return Color.green.opacity(0.12)
         case .medium: return Color.orange.opacity(0.14)
         case .high: return Color.red.opacity(0.14)
@@ -172,7 +137,7 @@ private struct HistoryCard: View {
     }
 
     private var borderColor: Color {
-        switch result.level {
+        switch result.riskLevel {
         case .low: return Color.green.opacity(0.35)
         case .medium: return Color.orange.opacity(0.35)
         case .high: return Color.red.opacity(0.35)

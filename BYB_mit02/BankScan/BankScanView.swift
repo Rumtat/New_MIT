@@ -4,12 +4,20 @@
 //
 //  Created by Vituruch Sinthusate on 15/1/2569 BE.
 //
+
 import SwiftUI
 
 struct BankScanView: View {
-    let onResult: (ScanResult) -> Void
+    // ✅ ชื่อใหม่ (ชัดกว่า)
+    let onScanResult: (ScanResult) -> Void
+
+    // ✅ คง initializer เดิมไว้ กัน call site พัง
+    init(onResult: @escaping (ScanResult) -> Void) {
+        self.onScanResult = onResult
+    }
+
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var vm = BankScanViewModel()
+    @StateObject private var viewModel = BankScanViewModel()
     @State private var bankMode: BankSearchMode = .byAccount
 
     var body: some View {
@@ -28,10 +36,10 @@ struct BankScanView: View {
                         accountInputSection
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
-                            nameInputSection
-                            
+                            ownerNameInputSection
+
                             // ✅ ปุ่มลัดสำหรับทดสอบ
-                            Button(action: { vm.fillTestData() }) {
+                            Button(action: { viewModel.fillSampleData() }) {
                                 HStack {
                                     Image(systemName: "testtube.2")
                                     Text("ใช้ข้อมูลทดสอบ (กาญจนา ทรัพย์แสน)")
@@ -48,11 +56,11 @@ struct BankScanView: View {
                 .cornerRadius(16)
                 .padding(.horizontal)
 
-                if let err = vm.errorMessage {
+                if let err = viewModel.errorMessage {
                     Text(err).font(.caption).foregroundColor(.red)
                 }
 
-                scanButton
+                startScanButton
                 Spacer()
             }
             .navigationTitle("สแกนบัญชี")
@@ -68,31 +76,28 @@ struct BankScanView: View {
     private var accountInputSection: some View {
         VStack(alignment: .leading) {
             Text("เลขบัญชี / พร้อมเพย์").font(.caption).foregroundColor(.secondary)
-            TextField("ป้อนตัวเลขเท่านั้น", text: $vm.inputText)
+            TextField("ป้อนตัวเลขเท่านั้น", text: $viewModel.accountNumberInput)
                 .font(.title3)
                 .keyboardType(.numberPad)
-                .onChange(of: vm.inputText) { oldValue, newValue in
-                    vm.inputText = String(newValue.filter { $0.isNumber }.prefix(15))
+                .onChange(of: viewModel.accountNumberInput) { _, newValue in
+                    viewModel.accountNumberInput = String(newValue.filter { $0.isNumber }.prefix(15))
                 }
         }
     }
 
-    // เปลี่ยนส่วน nameInputSection ใน BankScanView.swift
-    private var nameInputSection: some View {
+    private var ownerNameInputSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("ชื่อและนามสกุลเจ้าของบัญชี")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            
-            // ✅ ใช้ตัวแปร inputFullName เพียงตัวเดียว
-            TextField("ป้อนชื่อ-นามสกุล (เช่น กาญจนา ทรัพย์แสน)", text: $vm.inputFullName)
+
+            TextField("ป้อนชื่อ-นามสกุล (เช่น กาญจนา ทรัพย์แสน)", text: $viewModel.inputFullName)
                 .font(.title3)
                 .textFieldStyle(.roundedBorder)
                 .disableAutocorrection(true)
                 .textInputAutocapitalization(.never)
-            
-            // ปุ่มลัดสำหรับทดสอบเพื่อให้มั่นใจว่าดึงข้อมูลได้
-            Button(action: { vm.fillTestData() }) {
+
+            Button(action: { viewModel.fillSampleData() }) {
                 Text("ใช้ข้อมูลทดสอบ: กาญจนา ทรัพย์แสน")
                     .font(.caption2)
                     .foregroundColor(.blue)
@@ -100,12 +105,11 @@ struct BankScanView: View {
         }
     }
 
-
-    private var scanButton: some View {
+    private var startScanButton: some View {
         Button {
             Task {
-                if let result = await vm.scanAccount(mode: bankMode) {
-                    onResult(result)
+                if let result = await viewModel.scanBankAccount(mode: bankMode) {
+                    onScanResult(result)
                     dismiss()
                 }
             }
@@ -120,16 +124,15 @@ struct BankScanView: View {
             .foregroundColor(.white)
             .cornerRadius(16)
         }
-        .disabled(!canScan || vm.isLoading)
+        .disabled(!canScan || viewModel.isLoading)
         .padding(.horizontal)
     }
 
     private var canScan: Bool {
         if bankMode == .byAccount {
-            return !vm.inputText.isEmpty
+            return !viewModel.accountNumberInput.isEmpty
         } else {
-            return !vm.inputFullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return !viewModel.inputFullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
-
 }

@@ -6,10 +6,15 @@
 //
 
 
+//
+//  StatusPill.swift
+//  BYB_mit02
+//
+
 import SwiftUI
 
 struct StatusPill: View {
-    let level: RiskLevel
+    let riskLevel: RiskLevel
 
     var body: some View {
         Text(text)
@@ -24,7 +29,7 @@ struct StatusPill: View {
     }
 
     private var text: String {
-        switch level {
+        switch riskLevel {
         case .low: return "SAFE"
         case .medium: return "RISK"
         case .high: return "SCAM"
@@ -32,7 +37,7 @@ struct StatusPill: View {
     }
 
     private var color: Color {
-        switch level {
+        switch riskLevel {
         case .low: return .green
         case .medium: return .orange
         case .high: return .red

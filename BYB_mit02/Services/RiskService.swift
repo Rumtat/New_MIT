@@ -2,9 +2,6 @@
 //  RiskService.swift
 //  BYB_mit02
 //
-//  Created by Vituruch Sinthusate on 7/1/2569 BE.
-//
-
 
 import Foundation
 
@@ -17,26 +14,48 @@ final class RiskService {
         self.repository = repository
     }
 
-    /// คืนค่าเฉพาะผลจากฐานข้อมูล (DB)
-    /// - ถ้าพบใน DB -> reasons เป็นหลักฐาน DB (ไม่ใส่ noDataReason)
-    /// - ถ้าไม่พบใน DB -> reasons = [noDataReason]
-    func scanDBOnly(type: ScanType, input: String) async -> ScanResult {
+    // Database-only scan
+    func scanDatabaseOnly(type: ScanType, input: String) async -> ScanResult {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if type == .faceScan || type == .report {
-            return ScanResult(type: type, input: trimmed, level: .low, reasons: [])
-        }
-
         let lookupType: ScanType = (type == .qr) ? .url : type
-        let matches = await repository.findMatches(type: lookupType, input: trimmed)
+        let entries = await repository.findEntries(type: lookupType, input: trimmed)
 
-        if !matches.isEmpty {
-            // พบใน DB (ให้เป็น high)
-            let reasons = matches.map { "ฐานข้อมูลมิจฉาชีพ: \($0.label)" }
-            return ScanResult(type: type, input: trimmed, level: .high, reasons: reasons)
+        guard !entries.isEmpty else {
+            return ScanResult(
+                type: type,
+                input: trimmed,
+                riskLevel: .low,
+                reasons: [Self.noDataReason]
+            )
         }
 
-        // ไม่พบใน DB -> flag no data
-        return ScanResult(type: type, input: trimmed, level: .low, reasons: [Self.noDataReason])
+        let dbLevel = entries
+            .map { Self.riskLevelFromLabel($0.label) }
+            .max() ?? .high
+
+        let reasons = entries.map {
+            $0.note.isEmpty
+            ? "ฐานข้อมูลมิจฉาชีพ: \($0.label)"
+            : "ฐานข้อมูลมิจฉาชีพ: \($0.label) — \($0.note)"
+        }
+
+        return ScanResult(
+            type: type,
+            input: trimmed,
+            riskLevel: dbLevel,
+            reasons: reasons.uniquedPreservingOrder()
+        )
+    }
+
+    func scan(type: ScanType, input: String) async -> ScanResult {
+        await scanDatabaseOnly(type: type, input: input)
+    }
+
+    private static func riskLevelFromLabel(_ label: String) -> RiskLevel {
+        let s = label.lowercased()
+        if s.contains("high") { return .high }
+        if s.contains("medium") { return .medium }
+        if s.contains("low") { return .low }
+        return .high
     }
 }

@@ -5,37 +5,31 @@
 //  Created by Vituruch Sinthusate on 17/1/2569 BE.
 //
 
-
-//
-//  QRScannerView.swift
-//  BYB_mit02
-//
-
 import SwiftUI
 import AVFoundation
 
 struct QRScannerView: UIViewControllerRepresentable {
-    typealias UIViewControllerType = ScannerViewController
+    typealias UIViewControllerType = QRScannerViewController
 
-    var onResult: (String) -> Void
-    var onCancel: () -> Void
+    var onScanned: (String) -> Void
+    var onClose: () -> Void
 
-    func makeUIViewController(context: Context) -> ScannerViewController {
-        let vc = ScannerViewController()
-        vc.onResult = onResult
-        vc.onCancel = onCancel
+    func makeUIViewController(context: Context) -> QRScannerViewController {
+        let vc = QRScannerViewController()
+        vc.onScanned = onScanned
+        vc.onClose = onClose
         return vc
     }
 
-    func updateUIViewController(_ uiViewController: ScannerViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: QRScannerViewController, context: Context) {}
 }
 
 // MARK: - UIKit VC
 
-final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
 
-    var onResult: ((String) -> Void)?
-    var onCancel: (() -> Void)?
+    var onScanned: ((String) -> Void)?
+    var onClose: (() -> Void)?
 
     private let session = AVCaptureSession()
     private var previewLayer: AVCaptureVideoPreviewLayer?
@@ -92,7 +86,7 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
     }
 
     private func setupOverlay() {
-        // Top bar with close button
+        // Close button
         let close = UIButton(type: .system)
         close.setTitle("ปิด", for: .normal)
         close.setTitleColor(.white, for: .normal)
@@ -137,18 +131,20 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
     }
 
     @objc private func tapClose() {
-        onCancel?()
+        onClose?()
     }
 
     func metadataOutput(_ output: AVCaptureMetadataOutput,
                         didOutput metadataObjects: [AVMetadataObject],
                         from connection: AVCaptureConnection) {
         guard !didSendResult else { return }
+
+        // ✅ FIX: บรรทัดเดิมโดน path มาทับ ทำให้ compile ไม่ได้
         guard let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
               let value = obj.stringValue, !value.isEmpty
         else { return }
 
         didSendResult = true
-        onResult?(value)
+        onScanned?(value)
     }
 }

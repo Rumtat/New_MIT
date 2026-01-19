@@ -8,16 +8,16 @@ import PhotosUI
 import UIKit
 
 struct MainView: View {
-    @StateObject private var vm = ScanViewModel()
+    @StateObject private var viewModel = ScanViewModel()
 
-    @State private var goResult: ScanResult?
-    @State private var navigateToSettings = false
-    @State private var showLoading = false
-    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var selectedResult: ScanResult?
+    @State private var showSettings = false
+    @State private var showLoadingOverlay = false
+    @State private var selectedPhotoPickerItem: PhotosPickerItem? = nil
 
     // Sprint B
-    @State private var showQRScanner = false
-    @State private var showHistory = false
+    @State private var showQRScannerSheet = false
+    @State private var showHistoryScreen = false
 
     var body: some View {
         NavigationStack {
@@ -25,14 +25,14 @@ struct MainView: View {
                 Color(.systemGroupedBackground).ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    HeaderBar(onSettings: { navigateToSettings = true })
+                    HeaderBar(onSettings: { showSettings = true })
                         .background(Color.blue.ignoresSafeArea(edges: .top))
 
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 25) {
-                            if vm.selectedType == .report {
+                            if viewModel.selectedType == .report {
                                 ReportScamView()
-                            } else if vm.selectedType == .faceScan {
+                            } else if viewModel.selectedType == .faceScan {
                                 ImageScanView()
                             } else {
                                 mainScanContent
@@ -44,53 +44,53 @@ struct MainView: View {
                 }
 
                 BottomActionBar(
-                    selected: vm.selectedType,
+                    selected: viewModel.selectedType,
                     onSelect: { newType in
-                        vm.selectedType = newType
-                        vm.errorMessage = nil
+                        viewModel.selectedType = newType
+                        viewModel.errorMessage = nil
                     },
-                    onReport: { vm.selectedType = .report }
+                    onReport: { viewModel.selectedType = .report }
                 )
                 .background(Color.blue.ignoresSafeArea(edges: .bottom))
             }
             .navigationBarHidden(true)
 
             // Result
-            .navigationDestination(item: $goResult) { result in
+            .navigationDestination(item: $selectedResult) { result in
                 switch result.type {
                 case .phone:
-                    PhoneResultView(result: result)
+                    PhoneResultView(scanResult: result)
                 case .bank:
                     BankResultView(result: result)
                 default:
-                    ThaiResultView(result: result)
+                    ThaiResultView(scanResult: result)
                 }
             }
 
             // Settings
-            .navigationDestination(isPresented: $navigateToSettings) {
+            .navigationDestination(isPresented: $showSettings) {
                 SettingsView()
             }
 
             // History
-            .navigationDestination(isPresented: $showHistory) {
-                HistoryView(history: vm.history) { r in
-                    goResult = r
+            .navigationDestination(isPresented: $showHistoryScreen) {
+                ScanHistoryView(historyStore: viewModel.historyStore) { r in
+                    selectedResult = r
                 }
             }
 
-            .fullScreenCover(isPresented: $showLoading) {
+            .fullScreenCover(isPresented: $showLoadingOverlay) {
                 InlineLoadingView()
             }
 
             // QR Scanner
-            .sheet(isPresented: $showQRScanner) {
+            .sheet(isPresented: $showQRScannerSheet) {
                 QRScannerView(
-                    onResult: { value in
-                        showQRScanner = false
-                        handleQRScan(value)
+                    onScanned: { value in
+                        showQRScannerSheet = false
+                        handleScannedQRValue(value)
                     },
-                    onCancel: { showQRScanner = false }
+                    onClose: { showQRScannerSheet = false }
                 )
                 .ignoresSafeArea()
             }
@@ -99,24 +99,24 @@ struct MainView: View {
 
     private var mainScanContent: some View {
         VStack(spacing: 18) {
-            TitleBlock(selectedType: vm.selectedType)
+            TitleBlock(selectedType: viewModel.selectedType)
 
             InputCard(
-                selectedType: vm.selectedType,
-                inputText: $vm.inputText,
-                phoneDigits: $vm.phoneDigits,
-                fullName: $vm.fullNameInput,
-                bankMode: $vm.bankMode,
-                selectedPhotoItem: $selectedPhotoItem,
+                selectedType: viewModel.selectedType,
+                inputText: $viewModel.inputText,
+                phoneDigits: $viewModel.phoneDigits,
+                fullName: $viewModel.fullNameInput,
+                bankMode: $viewModel.bankMode,
+                selectedPhotoItem: $selectedPhotoPickerItem,
                 onPickPhotoChanged: { },
                 onPaste: pasteFromClipboard,
                 onImportFile: { }
             )
 
             // ปุ่มเปิดกล้อง QR เฉพาะโหมด QR
-            if vm.selectedType == .qr {
+            if viewModel.selectedType == .qr {
                 Button {
-                    showQRScanner = true
+                    showQRScannerSheet = true
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "qrcode.viewfinder")
@@ -132,7 +132,7 @@ struct MainView: View {
                 .padding(.horizontal, 16)
             }
 
-            if let error = vm.errorMessage {
+            if let error = viewModel.errorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.red)
@@ -145,35 +145,34 @@ struct MainView: View {
             // ✅ เหลือ Recent แค่ “ชุดเดียว”
             recentHeader
 
-            if !vm.history.items.isEmpty {
+            if !viewModel.historyStore.items.isEmpty {
                 RecentSection(
-                    items: Array(vm.history.items.prefix(3)),   // ✅ แสดงแค่ 3 อันล่าสุด (กันรก)
-                    onClear: { vm.history.clear() },
-                    onTap: { r in goResult = r }
+                    items: Array(viewModel.historyStore.items.prefix(3)),   // ✅ แสดงแค่ 3 อันล่าสุด (กันรก)
+                    onClear: { viewModel.historyStore.clear() },
+                    onTap: { r in selectedResult = r }
                 )
             }
         }
         .padding(.horizontal, 16)
     }
 
-
     private var recentHeader: some View {
         HStack {
-            Text("Recent Scan")
+            Text("ผลสแกนย้อนหลัง")
                 .font(.title3).bold()
 
             Spacer()
 
             Button {
-                showHistory = true
+                showHistoryScreen = true
             } label: {
                 Text("ดูประวัติทั้งหมด")
                     .font(.subheadline).bold()
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.blue)
-            .disabled(vm.history.items.isEmpty)
-            .opacity(vm.history.items.isEmpty ? 0.5 : 1)
+            .disabled(viewModel.historyStore.items.isEmpty)
+            .opacity(viewModel.historyStore.items.isEmpty ? 0.5 : 1)
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
@@ -181,72 +180,69 @@ struct MainView: View {
 
     private var scanButton: some View {
         Button {
-            Task { await runScan() }
+            Task { await performScan() }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 18, weight: .bold))
-                Text(scanButtonTitle(for: vm.selectedType))
+                Text(scanButtonTitleText(for: viewModel.selectedType))
                     .font(.headline)
             }
             .frame(maxWidth: .infinity, minHeight: 56)
-            .background(vm.normalizedInputForScan().isEmpty ? Color.gray.opacity(0.3) : Color.blue)
+            .background(viewModel.normalizedInputForScan().isEmpty ? Color.gray.opacity(0.3) : Color.blue)
             .foregroundColor(.white)
             .cornerRadius(16)
         }
         .padding(.horizontal, 16)
-        .disabled(vm.isLoading || vm.normalizedInputForScan().isEmpty)
+        .disabled(viewModel.isLoading || viewModel.normalizedInputForScan().isEmpty)
     }
 
-    private func handleQRScan(_ rawValue: String) {
-        vm.errorMessage = nil
+    private func handleScannedQRValue(_ rawValue: String) {
+        viewModel.errorMessage = nil
 
         // ✅ ถ้า QR เป็น URL -> normalize แล้วตรวจเหมือนลิงก์
-        if vm.looksLikeUrl(rawValue) {
-            vm.selectedType = .url
-            vm.inputText = vm.normalizeUrlInput(rawValue)
+        if viewModel.looksLikeUrl(rawValue) {
+            viewModel.selectedType = .url
+            viewModel.inputText = viewModel.normalizeUrlInput(rawValue)
         } else {
-            // ไม่ใช่ URL ก็ตรวจแบบ QR data ปกติ (ใน Sprint A scan logic จะ treat qr เหมือน url ใน RiskService อยู่แล้ว)
-            vm.selectedType = .qr
-            vm.inputText = rawValue
+            viewModel.selectedType = .qr
+            viewModel.inputText = rawValue
         }
 
-        Task { await runScan() }
+        Task { await performScan() }
     }
 
-    private func runScan() async {
-        showLoading = true
+    private func performScan() async {
+        showLoadingOverlay = true
 
-        let res: ScanResult?
+        let result: ScanResult?
 
-        switch vm.selectedType {
+        switch viewModel.selectedType {
         case .phone:
-            res = await vm.runPhoneScan()
+            result = await viewModel.runPhoneScan()
         case .bank:
-            res = await vm.runBankScan()
+            result = await viewModel.runBankScan()
         case .url, .qr, .sms, .text:
-            res = await vm.runScan()
+            result = await viewModel.runScan()
         case .faceScan, .report:
-            res = nil
+            result = nil
         }
 
-        showLoading = false
+        showLoadingOverlay = false
 
-        if let r = res {
-            goResult = r
-
-            // ✅ กดค้นหาแล้วล้างข้อความทันที
-            vm.clearAllInputs()
+        if let r = result {
+            selectedResult = r
+            viewModel.clearAllInputs()
         }
     }
 
-    private func scanButtonTitle(for type: ScanType) -> String {
+    private func scanButtonTitleText(for type: ScanType) -> String {
         switch type {
-        case .url: return "SCAN LINK"
-        case .qr: return "SCAN QR DATA"
-        case .sms: return "SCAN SMS"
-        case .phone: return "SCAN PHONE"
-        case .bank: return "SCAN ACCOUNT"
+        case .url: return "สแกนลิงค์ที่ต้องสงสัย"
+        case .qr: return "สแกนคิวอาร์โค้ดที่ต้องสงสัย"
+        case .sms: return "สแกนข้อความที่ต้องสงสัย"
+        case .phone: return "สแกนเบอร์โทรศัพท์ที่ต้องสงสัย"
+        case .bank: return "สแกนเลขบัญชีหรือชื่อที่ต้องสงสัย"
         case .text: return "SCAN TEXT"
         case .faceScan: return "SCAN IMAGE"
         case .report: return "REPORT"
@@ -255,24 +251,24 @@ struct MainView: View {
 
     private func pasteFromClipboard() {
         guard let s = UIPasteboard.general.string else { return }
-        vm.errorMessage = nil
+        viewModel.errorMessage = nil
 
-        switch vm.selectedType {
+        switch viewModel.selectedType {
         case .phone:
-            vm.phoneDigits = String(s.filter { "0123456789+".contains($0) }.prefix(15))
+            viewModel.phoneDigits = String(s.filter { "0123456789+".contains($0) }.prefix(15))
 
         case .bank:
-            if vm.bankMode == .byAccount {
-                vm.inputText = String(s.filter { $0.isNumber }.prefix(32))
+            if viewModel.bankMode == .byAccount {
+                viewModel.inputText = String(s.filter { $0.isNumber }.prefix(32))
             } else {
-                vm.fullNameInput = s
+                viewModel.fullNameInput = s
             }
 
         case .url:
-            vm.inputText = vm.normalizeUrlInput(s)
+            viewModel.inputText = viewModel.normalizeUrlInput(s)
 
         default:
-            vm.inputText = s
+            viewModel.inputText = s
         }
     }
 }

@@ -1,83 +1,81 @@
 //
-//  PhoneResultView.swift
+//  BankResultView.swift
 //  BYB_mit02
 //
-//  Created by Vituruch Sinthusate on 13/1/2569 BE.
+//  Created by Vituruch Sinthusate on 15/1/2569 BE.
 //
 
 import SwiftUI
 
-struct PhoneResultView: View {
-    let result: ScanResult
+struct BankResultView: View {
+    // ✅ ชื่อใหม่
+    let scanResult: ScanResult
+
+    // ✅ คง initializer เดิมไว้ กัน call site พัง
+    init(result: ScanResult) {
+        self.scanResult = result
+    }
 
     private var isNoData: Bool {
-        result.reasons.contains(RiskService.noDataReason)
+        scanResult.reasons.contains(RiskService.noDataReason)
     }
 
-    private var isUnknown: Bool {
-        result.reasons.contains("ไม่สามารถตรวจสอบได้เนื่องจากไม่พบที่อยู่ของเว็บไซต์")
+    private var isUnverifiable: Bool {
+        scanResult.reasons.contains("ไม่สามารถตรวจสอบได้เนื่องจากไม่พบที่อยู่ของเว็บไซต์")
     }
 
-    private var accent: Color {
-        if isNoData || isUnknown { return .gray }
-        switch result.level {
+    private var statusColor: Color {
+        if isNoData || isUnverifiable { return .gray }
+        switch scanResult.riskLevel {
         case .low: return .green
         case .medium: return .orange
         case .high: return .red
         }
     }
 
-    private var headline: String {
-        if isUnknown { return "ไม่สามารถตรวจสอบได้" }
+    private var statusTitle: String {
+        if isUnverifiable { return "ไม่สามารถตรวจสอบได้" }
         if isNoData { return "ไม่มีข้อมูลในระบบ" }
-        switch result.level {
+        switch scanResult.riskLevel {
         case .low: return "ปลอดภัย"
         case .medium: return "มีความเสี่ยง"
         case .high: return "ไม่ปลอดภัย"
         }
     }
 
-    private var pillText: String {
-        if isUnknown { return "UNKNOWN" }
-        if isNoData { return "NO DATA" }
-        switch result.level {
-        case .low: return "SAFE"
-        case .medium: return "RISK"
-        case .high: return "SCAM"
-        }
+    private var displayNameLine: String {
+        let parts = [scanResult.bankName, scanResult.ownerName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? "" : parts.joined(separator: " • ")
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
 
-                // Top status
                 VStack(spacing: 10) {
                     Circle()
-                        .fill(accent.opacity(0.12))
+                        .fill(statusColor.opacity(0.12))
                         .frame(width: 120, height: 120)
 
-                    Text(headline)
+                    Text(statusTitle)
                         .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(accent)
+                        .foregroundStyle(statusColor)
 
-                    Text(result.input)
-                        .font(.system(size: 24, weight: .medium))
+                    Text(scanResult.input)
+                        .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(.secondary)
 
-                    Text(pillText)
-                        .font(.caption).bold()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.gray.opacity(isNoData || isUnknown ? 0.15 : 0.0))
-                        .foregroundStyle((isNoData || isUnknown) ? Color.gray : accent)
-                        .cornerRadius(10)
-                        .opacity((isNoData || isUnknown) ? 1 : 0) // ป้ายบนสุดโชว์เฉพาะ NO DATA/UNKNOWN
+                    if !displayNameLine.isEmpty {
+                        Text(displayNameLine)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.top, 10)
 
-                // ข้อมูลเชิงลึก (heuristic)
-                if !result.reasons.isEmpty {
+                if !scanResult.reasons.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass.circle.fill")
@@ -89,10 +87,10 @@ struct PhoneResultView: View {
 
                         Divider()
 
-                        ForEach(result.reasons.indices, id: \.self) { i in
+                        ForEach(scanResult.reasons.indices, id: \.self) { i in
                             HStack(alignment: .top, spacing: 10) {
                                 Text("•")
-                                Text(result.reasons[i])
+                                Text(scanResult.reasons[i])
                                     .font(.subheadline)
                                     .foregroundStyle(.primary)
                             }
@@ -106,16 +104,15 @@ struct PhoneResultView: View {
                     .padding(.horizontal, 16)
                 }
 
-                // ผลการวิเคราะห์ความเสี่ยง (แสดง NO DATA ชัด ๆ)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("ผลการวิเคราะห์ความเสี่ยง")
                         .font(.headline)
 
                     HStack(spacing: 10) {
-                        Image(systemName: (isNoData || isUnknown) ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
-                            .foregroundStyle(accent)
+                        Image(systemName: (isNoData || isUnverifiable) ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                            .foregroundStyle(statusColor)
 
-                        Text(isNoData ? RiskService.noDataReason : headline)
+                        Text(isNoData ? RiskService.noDataReason : statusTitle)
                             .font(.subheadline)
                             .foregroundStyle(.primary)
 
@@ -132,7 +129,7 @@ struct PhoneResultView: View {
                 Spacer(minLength: 24)
             }
         }
-        .navigationTitle("ผลการสแกนเบอร์")
+        .navigationTitle("ผลการสแกนบัญชี")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

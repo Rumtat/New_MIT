@@ -7,34 +7,30 @@
 
 import Foundation
 
+// MARK: - Scan Type
+
 enum ScanType: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 
-    // Core scan types (ตามเอกสาร)
+    // Core scan types
     case url, phone, bank, qr, sms
 
-    // Legacy / existing screens (ยังคงไว้เพื่อไม่ให้ UI เดิมพัง)
+    // Legacy / existing screens
     case text, report, faceScan
 }
+
+// MARK: - Bank Search
 
 enum BankSearchMode: String, CaseIterable, Codable {
     case byAccount = "By Account"
     case byName = "By Name"
 }
 
-enum RiskLevel: String, Codable {
+// MARK: - Risk Level (data-level only)
+
+enum RiskLevel: String, Codable, Comparable {
     case low, medium, high
 
-    var displayTitle: String {
-        switch self {
-        case .low: return "ปลอดภัย"
-        case .medium: return "มีความเสี่ยง"
-        case .high: return "ไม่ปลอดภัย / มิจฉาชีพ"
-        }
-    }
-}
-
-extension RiskLevel: Comparable {
     private var rank: Int {
         switch self {
         case .low: return 0
@@ -42,36 +38,42 @@ extension RiskLevel: Comparable {
         case .high: return 2
         }
     }
-    static func < (lhs: RiskLevel, rhs: RiskLevel) -> Bool { lhs.rank < rhs.rank }
+
+    static func < (lhs: RiskLevel, rhs: RiskLevel) -> Bool {
+        lhs.rank < rhs.rank
+    }
 }
+
+// MARK: - Scan Result
 
 struct ScanResult: Identifiable, Codable, Hashable {
     let id: UUID
     let type: ScanType
     let input: String
-    let level: RiskLevel
+    let riskLevel: RiskLevel
     let reasons: [String]
     let timestamp: Date
+
+    // Optional metadata
     var bankName: String?
     var ownerName: String?
 
-    init(type: ScanType, input: String, level: RiskLevel, reasons: [String]) {
+    init(
+        type: ScanType,
+        input: String,
+        riskLevel: RiskLevel,
+        reasons: [String]
+    ) {
         self.id = UUID()
         self.type = type
         self.input = input
-        self.level = level
+        self.riskLevel = riskLevel
         self.reasons = reasons
         self.timestamp = Date()
     }
-
-    var displayTitle: String {
-        switch level {
-        case .low: return "ปลอดภัย"
-        case .medium: return "มีความเสี่ยง"
-        case .high: return "ไม่ปลอดภัย"
-        }
-    }
 }
+
+// MARK: - Bank Blacklist Entry
 
 struct BankBlacklistEntry: Codable, Identifiable {
     var id: String
@@ -90,6 +92,9 @@ extension BankBlacklistEntry {
         }
     }
 }
+
+// MARK: - Scam Entry
+
 struct ScamEntry: Identifiable, Codable, Hashable {
     enum Kind: String, Codable {
         case phone
@@ -115,11 +120,82 @@ struct ScamEntry: Identifiable, Codable, Hashable {
     }
 }
 
+// MARK: - URL Analysis Result (moved from UrlRiskAnalyzer.swift)
+
+struct UrlAnalysisResult {
+    let normalizedUrl: String
+    let level: RiskLevel
+    let reasons: [String]
+    let finalUrl: String?
+    let redirectChain: [String]?
+}
+
+// MARK: - SMS Scan Result (moved from SmsRiskAnalyzer.swift)
+
+struct SmsScanResult {
+    let riskLevel: RiskLevel
+    let reasons: [String]
+    let urls: [String]
+    let phoneNumbers: [String]
+    let bankAccounts: [String]
+}
+
+// MARK: - Report Case (moved from Reportcase.swift)
+
+struct ReportCase: Codable {
+    let fullName: String
+    let phoneNumber: String
+    let bankAccount: String
+    let email: String
+    let type: String
+    let date: Date
+    let amount: Double
+    let details: String
+
+    // แบบย่อสำหรับใช้ใน Service เดิม
+    init(
+        type: String,
+        value: String,
+        details: String,
+        fullName: String = "",
+        phoneNumber: String = "",
+        bankAccount: String = "",
+        email: String = "",
+        date: Date = Date(),
+        amount: Double = 0
+    ) {
+        self.type = type
+        self.value = value
+        self.details = details
+        self.fullName = fullName
+        self.phoneNumber = phoneNumber
+        self.bankAccount = bankAccount
+        self.email = email
+        self.date = date
+        self.amount = amount
+    }
+
+    private let value: String // backward compatibility
+}
+
+// MARK: - Onboarding Step (moved from OnboardingStep.swift)
+
+struct OnboardingStep: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+    let imageName: String
+    var primaryButtonTitle: String? = nil
+}
+
+// MARK: - Helpers
+
 extension Array where Element: Hashable {
     func uniquedPreservingOrder() -> [Element] {
         var seen = Set<Element>()
         var out: [Element] = []
         out.reserveCapacity(count)
+
         for e in self {
             if seen.insert(e).inserted {
                 out.append(e)
@@ -128,4 +204,3 @@ extension Array where Element: Hashable {
         return out
     }
 }
-

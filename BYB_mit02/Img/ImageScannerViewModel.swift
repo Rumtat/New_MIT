@@ -1,5 +1,5 @@
 //
-//  ImageScannerViewModel.swift
+//  ImageScanViewModel.swift
 //  BYB_mit02
 //
 //  Created by Vituruch Sinthusate on 14/1/2569 BE.
@@ -9,45 +9,52 @@ import SwiftUI
 import FirebaseFirestore
 
 @MainActor
-final class ImageScannerViewModel: ObservableObject {
-    @Published var resultName: String = ""
-    @Published var isScanning: Bool = false
-    @Published var infoSummary: String = ""
+final class ImageScanViewModel: ObservableObject {
+
+    // MARK: - UI State
+    @Published var resultTitle: String = ""
+    @Published var summaryText: String = ""
     @Published var reasons: [String] = []
     @Published var riskLevel: RiskLevel = .low
-    @Published var mockImageUrl: String = "" // เก็บลิงก์รูปจากเว็บนอก
-    
+    @Published var previewImageURL: String = ""
+    @Published var isLoading: Bool = false
+
     private let db = Firestore.firestore()
 
-    func fetchMockData(documentID: String) async -> ScanResult? {
-        isScanning = true
-        self.mockImageUrl = "" // รีเซ็ตค่ารูปเก่า
-        
+    // MARK: - Scan
+
+    /// Scan mock face data from Firestore (temporary)
+    func scanMockFace(documentID: String) async -> ScanResult? {
+        isLoading = true
+        previewImageURL = ""
+
+        defer { isLoading = false }
+
         do {
-            // ✅ ดึงข้อมูลจาก Collection face_blacklist
             let docRef = db.collection("face_blacklist").document(documentID)
             let document = try await docRef.getDocument()
-            
-            if document.exists, let data = document.data() {
-                // ดึงข้อความและรายละเอียด
-                self.resultName = data["name"] as? String ?? "ตรวจพบความเสี่ยง"
-                self.infoSummary = data["summary"] as? String ?? ""
-                self.reasons = data["reasons"] as? [String] ?? []
-                
-                // ✅ ดึงลิงก์รูปภาพภายนอกที่เตรียมไว้
-                self.mockImageUrl = data["imageUrl"] as? String ?? ""
-                
-                let rawLevel = data["riskLevel"] as? String ?? "low"
-                self.riskLevel = rawLevel == "high" ? .high : (rawLevel == "medium" ? .medium : .low)
-                
-                self.isScanning = false
-                return ScanResult(type: .faceScan, input: "External Mock ID: \(documentID)", level: self.riskLevel, reasons: self.reasons)
-            }
+
+            guard document.exists, let data = document.data() else { return nil }
+
+            resultTitle = data["name"] as? String ?? "ตรวจพบความเสี่ยง"
+            summaryText = data["summary"] as? String ?? ""
+            reasons = data["reasons"] as? [String] ?? []
+            previewImageURL = data["imageUrl"] as? String ?? ""
+
+            let rawLevel = data["riskLevel"] as? String ?? "low"
+            riskLevel =
+                rawLevel == "high" ? .high :
+                rawLevel == "medium" ? .medium : .low
+
+            return ScanResult(
+                type: .faceScan,
+                input: "External Mock ID: \(documentID)",
+                riskLevel: riskLevel,
+                reasons: reasons
+            )
         } catch {
-            print("Firestore Error: \(error.localizedDescription)")
+            print("❌ Firestore Error:", error.localizedDescription)
+            return nil
         }
-        
-        isScanning = false
-        return nil
     }
 }

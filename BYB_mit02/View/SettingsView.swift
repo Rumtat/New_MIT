@@ -7,13 +7,11 @@
 
 import SwiftUI
 
-import SwiftUI
-
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     // ✅ เชื่อมต่อกับตัวแปรสถานะการเปิดแอปครั้งแรก
     @AppStorage("hasSeenOnboarding") var hasSeenOnboarding: Bool = false
-    @StateObject private var historyStore = HistoryStore()
+    @StateObject private var historyStore = ScanHistoryStore.shared
     @State private var showDeleteAlert = false
     
     var body: some View {

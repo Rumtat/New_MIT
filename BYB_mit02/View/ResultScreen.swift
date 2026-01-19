@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-struct ResultView: View {
-    let result: ScanResult
+struct ResultScreen: View {
+    let scanResult: ScanResult
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -16,12 +16,12 @@ struct ResultView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 16) {
-                Text(result.level == .low ? "This Link is safe!" : "WARNING\nThis link could be dangerous!")
+                Text(scanResult.riskLevel == .low ? "This Link is safe!" : "WARNING\nThis link could be dangerous!")
                     .font(.title2).bold()
                     .multilineTextAlignment(.center)
 
                 Button("Return to main menu") {
-                    dismiss() // กลับหน้าหลัก
+                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 12)
@@ -34,10 +34,10 @@ struct ResultView: View {
     }
 
     private var backgroundColor: Color {
-        switch result.level {
-        case .low: return Color.green.opacity(0.25)   // SAFE = เขียว
+        switch scanResult.riskLevel {
+        case .low: return Color.green.opacity(0.25)
         case .medium: return Color.orange.opacity(0.25)
-        case .high: return Color.red.opacity(0.25)    // SCAM = แดง
+        case .high: return Color.red.opacity(0.25)
         }
     }
 }

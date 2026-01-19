@@ -7,19 +7,19 @@
 
 
 //
-//  BankFirestoreService.swift
+//  BankRepository.swift
 //  BYB_mit02
 //
 
 import Foundation
 import FirebaseFirestore
 
-final class BankFirestoreService {
+final class BankRepository {
     private let db = Firestore.firestore()
 
     /// Fetch by Account (docID = account digits, may include leading zeros)
-    func fetchBlacklistByAccount(_ accountDigits: String) async throws -> BankBlacklistEntry? {
-        let q = accountDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+    func fetchByAccountNumber(_ accountNumber: String) async throws -> BankBlacklistEntry? {
+        let q = accountNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return nil }
 
         let doc = try await db.collection("bank_blacklist").document(q).getDocument()
@@ -35,7 +35,7 @@ final class BankFirestoreService {
     }
 
     /// Fetch by Name (exact match)
-    func fetchBlacklistByName(_ fullName: String) async throws -> [BankBlacklistEntry] {
+    func fetchByOwnerName(_ fullName: String) async throws -> [BankBlacklistEntry] {
         let q = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
 
@@ -58,11 +58,11 @@ final class BankFirestoreService {
     }
 
     /// Extra: look into bank_report for user reports (optional)
-    func fetchReportsByAccount(_ accountRaw: String) async -> [String] {
+    func fetchUserReports(accountNumber: String) async -> [String] {
         do {
             let snap = try await db
                 .collection("bank_report")
-                .whereField("accountNumber", isEqualTo: accountRaw)
+                .whereField("accountNumber", isEqualTo: accountNumber)
                 .limit(to: 10)
                 .getDocuments()
 

@@ -4,6 +4,10 @@
 //
 //  Created by Vituruch Sinthusate on 11/1/2569 BE.
 //
+//
+//  RecentSection.swift
+//  BYB_mit02
+//
 
 import SwiftUI
 
@@ -43,7 +47,7 @@ struct RecentSection: View {
                         HStack(spacing: 12) {
                             Circle()
                                 .frame(width: 14, height: 14)
-                                .foregroundStyle((isUnknown || isNoData) ? .gray : dotColor(for: r.level))
+                                .foregroundStyle((isUnknown || isNoData) ? .gray : dotColor(for: r.riskLevel))
                                 .opacity(0.9)
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -59,16 +63,16 @@ struct RecentSection: View {
                             } else if isNoData {
                                 pillGray("NO DATA")
                             } else {
-                                StatusPill(level: r.level) // ใช้ตัวเดิมในโปรเจกต์
+                                StatusPill(riskLevel: r.riskLevel)
                             }
                         }
                         .padding(14)
                         .background(
                             RoundedRectangle(cornerRadius: 14)
-                                .fill((isUnknown || isNoData) ? Color.gray.opacity(0.08) : background(for: r.level))
+                                .fill((isUnknown || isNoData) ? Color.gray.opacity(0.08) : background(for: r.riskLevel))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14)
-                                        .stroke((isUnknown || isNoData) ? Color.gray.opacity(0.2) : border(for: r.level), lineWidth: 1)
+                                        .stroke((isUnknown || isNoData) ? Color.gray.opacity(0.2) : border(for: r.riskLevel), lineWidth: 1)
                                 )
                         )
                         .padding(.horizontal, 16)
@@ -96,24 +100,24 @@ struct RecentSection: View {
             .cornerRadius(10)
     }
 
-    private func dotColor(for level: RiskLevel) -> Color {
-        switch level {
+    private func dotColor(for riskLevel: RiskLevel) -> Color {
+        switch riskLevel {
         case .low: return .green
         case .medium: return .orange
         case .high: return .red
         }
     }
 
-    private func background(for level: RiskLevel) -> Color {
-        switch level {
+    private func background(for riskLevel: RiskLevel) -> Color {
+        switch riskLevel {
         case .low: return Color.green.opacity(0.12)
         case .medium: return Color.orange.opacity(0.14)
         case .high: return Color.red.opacity(0.14)
         }
     }
 
-    private func border(for level: RiskLevel) -> Color {
-        switch level {
+    private func border(for riskLevel: RiskLevel) -> Color {
+        switch riskLevel {
         case .low: return Color.green.opacity(0.35)
         case .medium: return Color.orange.opacity(0.35)
         case .high: return Color.red.opacity(0.35)
